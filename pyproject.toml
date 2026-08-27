@@ -21,9 +21,15 @@ members = ["packages/*", "apps/core"]
 # uv then resolves that package's internal dependencies from the same commit, with no extra
 # declarations on the consumer's side. tests/test_workspace.py checks the list stays complete.
 [tool.uv.sources]
+hera-chats = { workspace = true }
+hera-core = { workspace = true }
+hera-home = { workspace = true }
+hera-mcp = { workspace = true }
 hera-permissions = { workspace = true }
+hera-profiles = { workspace = true }
 hera-prompts = { workspace = true }
 hera-providers = { workspace = true }
+hera-skillsets = { workspace = true }
 hera-storage = { workspace = true }
 hera-tools = { workspace = true }
 
@@ -38,9 +44,15 @@ dev = [
     # Needed at the workspace root for the pydantic mypy plugin to load.
     "pydantic>=2.9",
     "pre-commit>=4.6.2",
+    # hera_skillsets parses SKILL.md frontmatter; mypy --strict needs the stubs.
+    "types-PyYAML>=6.0",
     # Serves a real MCP server over HTTP in the hera_tools transport tests. It arrives with
     # the MCP SDK anyway; declared here so the suite does not depend on that staying true.
     "uvicorn>=0.30",
+    # Drives the built interface in the end-to-end suite. CI installs the browser with
+    # `uv run playwright install --with-deps chromium`; without this the command has no
+    # package to come from.
+    "playwright>=1.49",
 ]
 
 # ---------------------------------------------------------------------------
@@ -76,6 +88,14 @@ select = ["E", "F", "I", "UP", "B", "SIM", "ANN", "RUF"]
 # definition, and the whole job of the module is narrowing that into typed models -- the
 # helpers doing the narrowing have to accept it (ANN401).
 "packages/hera_tools/src/hera_tools/config.py" = ["ANN401"]
+# One function takes "whatever json.dumps can handle" on its way to the browser. Narrowing it
+# to a recursive JSON alias would buy no safety -- the input is already `model_dump(mode="json")`
+# output -- and cost a cast at every call site (ANN401).
+"apps/core/src/hera_core/sse.py" = ["ANN401"]
+# Alembic revisions are generated. The template imports the column types autogenerate may write
+# out fully qualified, and any one revision uses only some of them; editing each to satisfy the
+# linter is a chore that would eventually be done by deleting an import the next one needs.
+"apps/core/src/hera_core/migrations/versions/*.py" = ["F401"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -86,24 +106,37 @@ plugins = ["pydantic.mypy"]
 # tests/test_docs.py::test_mypy_checks_every_package fails if an entry is forgotten.
 files = [
     "tests",
+    "apps/core/src",
+    "apps/core/tests",
+    "packages/hera_chats/src",
+    "packages/hera_chats/tests",
+    "packages/hera_home/src",
+    "packages/hera_home/tests",
+    "packages/hera_mcp/src",
+    "packages/hera_mcp/tests",
     "packages/hera_permissions/src",
     "packages/hera_permissions/tests",
+    "packages/hera_profiles/src",
+    "packages/hera_profiles/tests",
     "packages/hera_prompts/src",
     "packages/hera_prompts/tests",
     "packages/hera_providers/src",
     "packages/hera_providers/tests",
+    "packages/hera_skillsets/src",
+    "packages/hera_skillsets/tests",
     "packages/hera_storage/src",
     "packages/hera_storage/tests",
     "packages/hera_tools/src",
     "packages/hera_tools/tests",
 ]
 
-# Two packages with a conftest.py resolve to one module name -- mypy derives it from the file
-# name, and pytest requires that name. pytest itself is fine because it loads conftest by path;
-# mypy has no equivalent, and refuses to check either file rather than pick one. Excluding them
-# is the narrowest fix available: ruff still lints them under the full rule set including ANN,
-# and a fixture that does not type-check shows up as a failure in every test that uses it.
-exclude = ["/tests/conftest\\.py$"]
+# Every conftest.py resolves to the same module name -- mypy derives it from the file name, and
+# pytest requires that name. pytest itself is fine because it loads conftest by path; mypy has
+# no equivalent, and given several it picks one and then cannot find the others' fixtures.
+# Excluding them all is the narrowest fix available: ruff still lints them under the full rule
+# set including ANN, and a fixture that does not type-check shows up as a failure in every test
+# that uses it.
+exclude = ["(^|/)conftest\\.py$"]
 
 [[tool.mypy.overrides]]
 module = ["tests.*", "*.tests.*"]
@@ -122,9 +155,7 @@ markers = [
 # plugin, so pytest imports it while loading entry points -- before pytest-cov could start
 # tracing. Everything at module level would count as unmeasured.
 [tool.coverage.run]
-# `apps/core/src` joins this list when the application exists; coverage warns on every run about
-# a source that is not importable yet. tests/test_workspace.py fails if a member is forgotten.
-source = ["packages"]
+source = ["packages", "apps/core/src"]
 omit = ["*/tests/*"]
 branch = true
 relative_files = true

@@ -18,6 +18,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "hera-home",
     "hera-permissions",
     "httpx2>=2.12",
     "mcp>=2.1",
