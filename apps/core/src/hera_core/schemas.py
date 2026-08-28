@@ -330,6 +330,22 @@ class PermissionAnswer(BaseModel):
     once** afterwards, or nobody can tell whether the decision stuck."""
 
 
+class QuestionAnswer(BaseModel):
+    """A person's reply to a question she asked.
+
+    One call, not a list, which is where this differs from :class:`PermissionAnswer`: several
+    permissions can be settled with one click because the answer is the same word, and two
+    questions cannot — each wants its own sentence. The turn only ever poses one at a time for
+    the same reason.
+    """
+
+    call_id: str = Field(min_length=1)
+    text: str = Field(max_length=8000)
+    """What they typed. May be empty: saying nothing is an answer, and she is told so rather
+    than being left waiting. Capped because it becomes a tool result inside the next prompt,
+    and an unbounded paste there is a context window spent without anybody choosing to."""
+
+
 class EmotionOut(BaseModel):
     """One stance, as the Emotions screen and the emotion card see it."""
 
@@ -598,6 +614,29 @@ class ProbeOut(BaseModel):
     ok: bool
     models: list[str]
     error: str
+
+
+class PreferencesOut(BaseModel):
+    """You and this machine, as the profile menu sees it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    timezone: str
+    """IANA name, or empty for UTC alone."""
+
+    now: str
+    """The sentence she is actually given this turn.
+
+    Returned rather than left for the screen to reconstruct: the interface would have to format
+    a date the same way the prompt does, in a second place, and the first daylight-saving change
+    would find out whether the two agreed. Showing the real line also makes the setting
+    checkable — you pick a zone and read what she will read.
+    """
+
+
+class PreferencesPatch(BaseModel):
+    timezone: str | None = Field(default=None, max_length=64)
+    """``None`` leaves it; ``""`` clears it back to UTC alone."""
 
 
 class HealthOut(BaseModel):

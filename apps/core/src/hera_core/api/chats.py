@@ -22,7 +22,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
-from hera_chats.events import ChatEvent, PermissionDecided, PermissionRequired
+from hera_chats.events import (
+    AnswerGiven,
+    AnswerRequired,
+    ChatEvent,
+    PermissionDecided,
+    PermissionRequired,
+)
 from sqlmodel import Session
 
 from hera_chats import (
@@ -39,6 +45,9 @@ from hera_chats import (
     events_of,
     title_from,
 )
+from hera_core.clock import render as render_now
+from hera_core.config import ConfigError
+from hera_core.config import load as load_config
 from hera_core.deps import Container, Db, Owner, not_found
 from hera_core.emotions import EmotionsError
 from hera_core.emotions import load as load_emotions
@@ -50,6 +59,7 @@ from hera_core.schemas import (
     MessageIn,
     MessageOut,
     PermissionAnswer,
+    QuestionAnswer,
     RedoIn,
 )
 from hera_core.sse import HEADERS, MEDIA_TYPE, event_frame, frame
@@ -268,6 +278,45 @@ def answer_permission(
     )
 
 
+@router.post("/chats/{chat_id}/answers")
+def answer_question(
+    chat_id: UUID, payload: QuestionAnswer, owner: Owner, db: Db, container: Container
+) -> StreamingResponse:
+    """Reply to a question she asked, and resume the turn it stopped.
+
+    The same route the permission card has, doing the same thing to the same machinery — which
+    is the point of `docs/tooling.md` § 4's argument for generalising the suspension rather than
+    building a second one. The only difference is what settles the call: a decision there, a
+    sentence here, and the sentence becomes the call's result so the model reads a reply to its
+    own question where a tool's output would have been.
+    """
+    chat = _require_chat(db, chat_id, owner)
+    assistant = MessageRepository(db).latest_assistant(chat.id)
+    if assistant is None:
+        raise not_found("turn to resume")
+
+    recorded = events_of(assistant)
+    # Checked against the paused turn rather than trusted: a call id that was never asked about
+    # would otherwise resume a turn with an answer to nothing in it, and the model would be
+    # handed a tool result for a call it never made.
+    asked = {event.call_id for event in recorded if isinstance(event, AnswerRequired)}
+    if payload.call_id not in asked:
+        raise not_found("question to answer")
+
+    given = AnswerGiven(call_id=payload.call_id, text=payload.text)
+
+    return _stream(
+        container,
+        db,
+        chat,
+        assistant,
+        text="",
+        lead=[given],
+        resume=[*recorded, given],
+        answers={payload.call_id: payload.text},
+    )
+
+
 # -- the streaming half ------------------------------------------------------------------
 
 
@@ -370,8 +419,28 @@ def _context(session: Session, chat: Chat, *, text: str, **extra: object) -> Tur
         profile=profile,
         history=history,
         emotions=_emotion_vocabulary(),
+        now=_now(),
         **extra,  # type: ignore[arg-type]  # resume/confirmed/denied, forwarded to the dataclass
     )
+
+
+def _now() -> str:
+    """The date and time, for the ``now`` slot.
+
+    Read per turn and per request, like the emotion vocabulary above and for the same reason: a
+    timezone changed on screen has to apply to the next turn rather than the next restart. It is
+    also the only honest place to compute *now* — a value captured at boot would be a day stale
+    by the second day the process was up.
+
+    A `config.toml` that will not parse falls back to UTC rather than propagating: the Models
+    screen is where a broken file gets explained, and losing the date over it would trade a
+    visible problem for a silent one.
+    """
+    try:
+        timezone = load_config().timezone
+    except ConfigError:
+        timezone = ""
+    return render_now(timezone)
 
 
 def _emotion_vocabulary() -> str:

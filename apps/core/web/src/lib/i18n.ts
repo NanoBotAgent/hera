@@ -122,6 +122,14 @@ export const t = {
 		denied: 'Denied'
 	},
 
+	question: {
+		asked: 'asked you',
+		nothing: 'She asked something, and it arrived empty.',
+		placeholder: 'Answer…',
+		noReply: 'You answered with nothing.',
+		send: 'Reply'
+	},
+
 	message: {
 		copy: 'Copy',
 		copied: 'Copied',
@@ -138,7 +146,8 @@ export const t = {
 		cancelled: 'Interrupted',
 		failed: 'This turn failed',
 		max_iterations: 'She stopped after using tools too many times',
-		awaiting_permission: 'Waiting for you'
+		awaiting_permission: 'Waiting for you',
+		awaiting_answer: 'Waiting for your answer'
 	},
 
 	emotions: {
@@ -242,6 +251,10 @@ export const t = {
 	},
 
 	profileMenu: {
+		timezone: 'Time zone',
+		timezoneHint: 'What she is told the date and time are. She is always told UTC as well.',
+		timezoneUtc: 'UTC only',
+		timezoneDetect: (zone: string) => `Use this machine’s (${zone})`,
 		open: 'You and this machine',
 		appearance: 'Appearance',
 		profiles: 'Answering as',
