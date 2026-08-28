@@ -8,21 +8,30 @@ the history. Updated as milestones land — this file is a snapshot, not a chang
 **v0.2 is planned in [versions/v0.2.0.md](versions/v0.2.0.md)** — five milestones, in the order
 *organise → produce → make room → remember → reflect*.
 
-Two branches are open, **stacked**, and neither is merged yet:
+**M1 and three fixes are on `main`**, merged bottom-up as #10 → #11 → #12 → #13:
 
-| Branch | Based on | What is on it |
-|---|---|---|
-| `feat/project-folders` | `main` | **M1.** Projects you can make, rename, remove and move chats between; the project screen at `/project/<id>`; `Select.svelte`, which is now every dropdown in the application |
-| `fix/mind-error-and-uncertainty` | `feat/project-folders` | **Two mind regions the model asked for** — `uncertainty` and `correction` — and `hera__ask`, without which the first of them is advice she cannot act on |
+| Landed as | What it was |
+|---|---|
+| #10 `feat/project-folders` | **M1.** Projects you can make, rename, remove and move chats between; the project screen at `/project/<id>`; `Select.svelte`, which is now every dropdown in the application |
+| #11 `fix/mind-error-and-uncertainty` | **Two mind regions the model asked for** — `uncertainty` and `correction` — plus `hera__ask`, without which the first is advice she cannot act on; **the date in every prompt**; the boot guard below |
+| #12 `fix/linear-turn-order` | A turn renders in the order it happened, rather than every gutter row and then all the prose |
+| #13 `fix/repeated-tool-calls` | An identical call runs at most twice a turn, and spending the tool budget ends with an answer instead of a half-sentence |
 
-**Stacked rather than independent, and for a concrete reason.** Migration `0004` lives on the
-first, so a `~/.hera` used to review it is stamped `0004`; checking out a branch without that
-revision made alembic refuse to boot with `Can't locate revision identified by '0004'`. Two
-branches that both touch the schema cannot be reviewed against one data directory unless the
-later one contains the earlier. So M1 merges first. `boot.check_home` now catches that class of
-mismatch and says what to do rather than raising alembic's stack trace.
+**They were stacked rather than independent, for a concrete reason worth keeping.** Migration
+`0004` lives on the first, so a `~/.hera` used to review it is stamped `0004`; checking out a
+branch without that revision made alembic refuse to boot with `Can't locate revision identified
+by '0004'`. Two branches that both touch the schema cannot be reviewed against one data
+directory unless the later one contains the earlier, and everything after inherits the same
+constraint — so they merged bottom-up, each rebased onto `main` after the one below it squashed.
+`boot.check_revision` now catches that class of mismatch and says what to do rather than raising
+alembic's stack trace.
 
-M2 (artifacts and skill resources) is next, and starts from `main` once these land.
+**A squash merge makes the branch above it lie.** `mergeStateStatus: CLEAN` means no conflicts,
+not a correct diff: a branch still based on the pre-squash tip proposes to *undo* whatever exists
+only in the squash. Checking `git diff --name-status origin/main HEAD` for deletions before each
+merge is what caught `.gitkeep` going missing, and it is worth doing every time.
+
+M2 (artifacts and skill resources) is next, and starts from `main`.
 
 ---
 
@@ -187,6 +196,17 @@ the model and the tool is a stub.
 
 ### What `hera_profiles` settled
 
+- **The date is in the prompt, and it is not a tool.** A model that does not know today's date
+  answers "what is current" from its training data, confidently and a year late, and nothing on
+  screen tells that apart from an answer that is merely wrong. `hera__search`'s description
+  already said to use it "whenever the answer depends on what is true now"; the date is what
+  makes that actionable. A `what_time_is_it` tool would spend a round trip on something free and
+  would only be called by a model that already suspected it needed to. UTC always, plus the
+  person's local time when `config.toml` names a zone — an IANA name, because an offset is wrong
+  twice a year. The zone is on the **profile menu**, not in Settings: where you are is a fact
+  about you, not about how she works. An unusable name degrades to UTC in `clock.render` and is
+  refused by the route, which is deliberately opposite — a person typing into a screen should be
+  told now, a turn already running should not fail over a file edited last week.
 - **Fourteen regions, and the last two were the model's idea.** Asked to read its own prompt, it
   reported two gaps in the same shape: nothing said what to do when it is **unsure** of an
   answer, and nothing said what to do when it notices mid-task that it is **on the wrong track**.
@@ -283,6 +303,21 @@ wrote.
   configures nothing runs the tool like any other and the server refuses it, which is the honest
   degradation. `hera_chats` naming a tool on her own server would be this package learning what
   Hera is.
+- **An identical call runs at most twice a turn.** Same tool, same arguments — with the keys
+  sorted, because a model does not emit them in a stable order and two calls differing only in
+  that are one request. The third comes back as a failed result quoting what the earlier ones
+  returned and saying the words did not work. Observed failure: asked for a figure that was not
+  in the results, the model ran one search four times, spent its whole budget and was cut off.
+  Every call *succeeded*, so nothing noticed. Twice rather than once because the turn cannot know
+  which tools are idempotent: reading a file after writing it is the same call with a
+  legitimately different answer, and a third inside one turn is a loop in every case worth
+  designing for.
+- **Spending the tool budget ends with an answer.** The loop used to stop the moment the ceiling
+  was hit, so the last batch of results was never shown to the model and the turn ended on
+  whatever it had said *before* going to look. There is now one final round with the tools
+  withheld — an empty tool list is arithmetic, where telling a model in prose to stop is advice.
+  The close reason stays `max_iterations`: *stopped looking and summarised* is not *finished*.
+  The ceiling is 12, up from 8, which is affordable once the budget is not spent on repeats.
 - **The calls beside a question are dropped rather than run.** She asked and stopped; running the
   rest would act on the assumption the question was about. History already says a call with no
   result never ran, so the model reads it correctly on resume.
@@ -450,6 +485,15 @@ wrote.
   everything else was bare native. The rail's `⋯` menus share the frame. Popups are anchored
   popovers with no scrim — the skill picker is a sheet because choosing skills is a task you go and
   do, and picking one value from four is not.
+- **A turn is one list, in event order.** It used to be two — every gutter row, then all the
+  prose — which reads correctly only for a turn that does its thinking up front. The moment she
+  speaks, thinks again and speaks again, the second thought was drawn *above* the sentence that
+  prompted it, and the turn could not be read downwards at all. `reduce` returns `blocks`: a run
+  of consecutive gutter rows is one bordered block, and prose and cards sit between the runs.
+  `activity` and `inline` survive as views over it rather than as two lists that had to stay in
+  step. Prose no longer accumulates across a tool call, which was the same bug from the other
+  side — text before and after a call merged, so the call was drawn below both halves of what it
+  produced.
 - **A question is drawn once too, out of three events.** The `hera__ask` call, the
   `answer_required` card and the synthesised `tool_result` are all about the same question, and
   only the card is a thing a person is meant to read. `QuestionCard` is `PermissionCard` with a
@@ -565,8 +609,19 @@ Three consequences, each of which has already cost a blocked merge:
   before merging, and rebase with `git rebase --onto origin/main <old-base>` so only your own
   commits replay.
 
-GitHub refuses `gh pr merge` for anything it considers part of a stack. Use
-`PUT /repos/{owner}/{repo}/pulls/{n}/merge-async` with `sha=` pinning the head you verified.
+`gh pr merge --squash --match-head-commit <sha>` is what to use, and it worked for the whole
+v0.2 M1 stack. `--match-head-commit` is the point rather than a flourish: it pins the merge to
+the head you actually ran the checks against, so a push landing between the check and the merge
+stops it instead of shipping something unverified.
+
+Two things that cost time and are not obvious:
+
+- **Retarget the branch above by hand.** Merging the base of a stacked pull request does not
+  retarget the one on top of it; the PR keeps pointing at a branch that no longer moves. Set it
+  with `gh pr edit <n> --base main` after each merge.
+- **A force-push does not always fire `synchronize`.** Twice here the rebased head landed and no
+  workflow ran, so the pull request sat with *no checks reported* and could never satisfy the
+  ruleset. Closing and reopening the pull request triggers the run.
 
 ## Releases and deployment
 
