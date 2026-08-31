@@ -16,8 +16,11 @@ provider = FakeProvider([
 ])
 ```
 
-A turn may also be an ``Exception``, which is raised instead of streamed. That is how the
-error paths get tested without a broken server.
+A turn may also be an ``Exception``, which is raised instead of streamed — and an ``Exception``
+*inside* a turn is raised at the point it is reached, so a stream that breaks half way through
+is one list rather than a hand-written provider class. Both matter: the first is an endpoint
+that is down, the second is the one a turn has to survive, because part of the answer arrived
+and is worth persisting.
 """
 
 from __future__ import annotations
@@ -34,13 +37,18 @@ from hera_providers.events import (
     TextDelta,
     ThinkingDelta,
     ToolCallReady,
+    ToolCallStarted,
     TurnEnd,
     Usage,
 )
 from hera_providers.request import ChatRequest
 
-Turn = Sequence[Event] | Exception
-"""One scripted answer: the events to stream, or the error to raise instead."""
+Turn = Sequence[Event | Exception] | Exception
+"""One scripted answer: the events to stream, or the error to raise instead.
+
+An error may also sit *among* the events, where it is raised once everything before it has been
+streamed. That is a broken connection rather than an unreachable server, and the two close a
+turn differently."""
 
 
 class FakeProviderExhausted(ProviderError):
@@ -85,6 +93,12 @@ class FakeProvider:
         if isinstance(turn, Exception):
             raise turn
         for event in turn:
+            if isinstance(event, Exception):
+                # Reached rather than raised up front, so whatever came before it has already
+                # been yielded -- which is the whole difference between "the endpoint is down"
+                # and "the connection broke mid-answer", and the second is the one the turn has
+                # to keep something from.
+                raise event
             yield event
 
     async def embed(self, texts: Sequence[str], *, model: str | None = None) -> list[list[float]]:
@@ -141,9 +155,18 @@ def thinking_turn(thinking: str, *chunks: str) -> list[Event]:
     return [ThinkingDelta(text=thinking), *text_turn(*chunks)]
 
 
-def tool_turn(*calls: ToolCallReady, text: str = "") -> list[Event]:
-    """A turn that asks for tools. Several calls at once is the normal case, not the corner."""
+def tool_turn(*calls: ToolCallReady, text: str = "", announce: bool = True) -> list[Event]:
+    """A turn that asks for tools. Several calls at once is the normal case, not the corner.
+
+    ``announce`` puts a :class:`ToolCallStarted` in front of each call, which is what a real
+    stream does — the name arrives in the first fragment and the whole call much later. On by
+    default so that a test written against this fake exercises the same event sequence the
+    browser will actually see; a test about what is *persisted* can turn it off, though it does
+    not need to, because the turn never records one.
+    """
     events: list[Event] = [TextDelta(text=text)] if text else []
+    if announce:
+        events.extend(ToolCallStarted(id=call.id, name=call.name) for call in calls)
     events.extend(calls)
     events.append(TurnEnd(reason="tool_calls"))
     return events

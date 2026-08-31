@@ -31,7 +31,115 @@ not a correct diff: a branch still based on the pre-squash tip proposes to *undo
 only in the squash. Checking `git diff --name-status origin/main HEAD` for deletions before each
 merge is what caught `.gitkeep` going missing, and it is worth doing every time.
 
-M2 (artifacts and skill resources) is next, and starts from `main`.
+**M2 is next, and it is two branches rather than one**, split where
+[tooling.md](tooling.md) § 5 said it had to be: artifacts and the scratchpad want the same storage,
+and answering them separately produces two.
+
+| | |
+|---|---|
+| **M2a** | The scratchpad, and a tool call that knows which chat it is in — [ADR 12](adr/0012-a-chat-has-a-scratchpad.md) |
+| **M2b** | Artifacts and skill resources — [ADR 13](adr/0013-an-artifact-is-a-file-she-publishes.md), [ADR 14](adr/0014-skill-resources-are-readable.md) |
+
+**ADR 13 took three drafts and none of the first two were built on**, which is the cheapest place
+for that to happen. Draft one made an artifact a versioned object with its own package and tables —
+a second store, a day after ADR 12 built the first, which `tooling.md` § 5 had explicitly warned
+about. Draft two made it a scratchpad file with a bit set on it, which is cheaper and wrong about
+what the scratchpad is for: a notes directory a person browses is one she has a reason to be tidy
+in. Both answered *where do the bytes go* and let *what a person sees* fall out of it, and it does
+not fall out.
+
+What shipped as the decision: **an artifact is a file she publishes**, in
+`chats/<id>/artifacts/` beside the scratchpad. The filename is the identity, the extension is the
+kind, and three tools — `create`, `edit`, `read` — make it. `edit` is a find-and-replace that must
+match exactly once, and it is the load-bearing one: re-emitting a 40 KB page to change a colour is
+minutes of generation and is what has actually been failing against the real endpoint. `inline`
+decides whether it is drawn in the conversation (a flow chart) or opened in the drawer (a page).
+No index, no tables, no versions.
+
+**A third stage was planned and dropped, and the reason is worth keeping because the mistake is
+easy to make twice.** The sandbox was pulled forward from *not in v0.2* on the assumption that
+artifacts needed somewhere to run code. They do not: `markdown`, `code`, `mermaid`, `html` and
+`svg` are content, and an HTML artifact is a sandboxed `iframe` in the browser rather than a
+container on the host. Running code is load-bearing only for the *script-running* half of
+Anthropic's skills, which is a smaller prize than a Docker dependency and a security claim to keep
+true. [ADR 15](adr/0015-running-code-in-a-container.md) is written and stands — it answers the
+question § 3 refused to let the work start without — and it is scheduled for **v0.3**.
+
+**The thing that blocked both, and was not obvious:** no tool can know which chat it is in. Her
+server is built once at startup with its ports bound, and `ManagedServer` runs every call as a
+child of a worker task created at *connect* time — so a `contextvars.ContextVar` set around the
+turn reads back empty in the tool, silently. It travels in MCP's `_meta` instead:
+`ToolRegistry.dispatch` takes an opaque `context` mapping, `hera_mcp`'s tools take a `ctx: Context`
+the SDK keeps out of the input schema, and the key travels through `ChatsSettings.chat_meta_key`
+the way `hera__ask`'s name travels through `asking_tools`. Verified against the SDK before any of
+it was designed around. `hera__remember(scope="chat")` has been missing exactly this since v0.1.
+
+**M2a is built**, on `feat/chat-scratchpad` off `main`. What it turned up:
+
+- **The `_meta` mechanism had to be verified against the SDK before it was designed around**, and
+  it holds: `client.call_tool(..., meta=…)` arrives at `ctx.request_context.meta`, and a
+  `ctx: Context` parameter is **excluded from the tool's input schema** — so the model does not
+  see a `chat_id` field and cannot fill one in with a guess. There is a test asserting the schema
+  has exactly `name`, `text` and `append` on it, because that exclusion is the whole safety
+  argument and it is somebody else's behaviour.
+- **A hand-built container drifts from `build_services` silently.** The suite assembles `Services`
+  itself rather than calling the real wiring, so it was missing `chat_meta_key` — the turn ran,
+  every call succeeded, and the only symptom was her scratchpad answering *this call is not part
+  of a conversation* in the middle of a working conversation. `apps/core/tests/test_wiring.py` is
+  the guard, and it drives the real registry rather than inspecting the wiring: a
+  `scratchpad=` argument can be present and be `None`.
+- **The containment check runs after `resolve`, not on the string.** A symlink in the scratchpad
+  is a traversal that every string check reads as an ordinary filename, so both the write and the
+  read are refused through it — refusing one and allowing the other would make the scratchpad a
+  file reader for anything a link already points at.
+- **A size refusal happens before the file is opened.** `open("wb")` truncates, so a check after
+  it would answer *no* and destroy the plan in the same call.
+- **The toy server in `hera_tools`' suite grew a tool**, which broke two tests asserting a count
+  of 2 on an unrelated server. `TOY_TOOL_COUNT` now, so a test about a server being *unreachable*
+  does not fail because a tool was added to the reachable one beside it. Same move on
+  `apps/core`'s catalogue assertion, which now reads `hera_mcp.TOOL_NAMES` rather than six
+  literals — spelled out, that test fails every time a tool is added and the fix is always to
+  paste the name in.
+
+**Three things came off the back of driving it against a real endpoint**, and all three are on the
+same branch:
+
+- **A tool call is announced before it is finished.** `tool_call_started` is a new
+  `hera_providers` variant carrying the id and the name, emitted from the stream fragment that
+  *names* the call rather than from the one that completes it. Until this, a turn spent the whole
+  of a long argument with nothing on screen — and an artifact whose content is a 40 KB document is
+  exactly that case, so this is a prerequisite for M2b rather than a nicety. It is **streamed and
+  never persisted**, which makes the reducer's contract explicit: a reload has strictly fewer
+  events and has to draw the same rows, and it does, because the started row and the ready row are
+  one row keyed on the call id.
+- **The gutter's verb column was too narrow for her own tool names.** `scratch write` and
+  `scratch read` both clipped to `scratch …`, so the two rows a reader most needs to tell apart
+  were the two it made identical. The column comment had predicted this exact failure; 8em now.
+- **The read timeout was three minutes and is ten**, and it is editable on Settings → Models rather
+  than only in `config.toml`. It is not a limit on how long an answer may take: httpx measures it
+  between one piece of the response and the next, so what it bounds is *silence* — loading the
+  weights, and prefilling a prompt that has grown a skill body and six rounds of history. A local
+  35B asked for a whole HTML page fell off the end of three minutes, and what a person saw was
+  `did not answer in time` under an answer that had been going fine.
+- **Raising that default did nothing, which was the more interesting bug.** `config.toml` is
+  seeded from the environment on first run and *every* field is dumped, so the file records the
+  defaults of whichever version wrote it first — and the file wins afterwards. Every default this
+  project ever improves is therefore silently dead for anybody who has already run Hera. It
+  surfaced as `timeout_s = 180.0` sitting in a real install that nobody had ever chosen it for.
+  `config.TUNING_FIELDS` is now omitted on write unless it differs from the default, so the file
+  means *what I decided* rather than *what the defaults were the day I installed it*. A value
+  somebody sets is still written and still wins. The endpoint's own fields are always written,
+  because they are what you came to the file to read.
+- **A failed turn could not be tried again.** `actionable` gated Copy and *Try again* on the same
+  flag, and that flag required something to copy — so a turn that failed before she said anything
+  had no controls at all, which is the one case a person is staring at wanting to retry. Copy is
+  about the answer and needs one; **try again is about the question and does not.** Found by
+  scripting a mid-stream `ProviderTimeout` and driving a real browser at it, which also gave
+  `FakeProvider` the ability to raise from *inside* a turn — an unreachable endpoint and a
+  connection that breaks half way through close a turn differently, and only the first was
+  scriptable before.
+
+1042 tests at 98 % coverage, plus 94 vitest and 12 Playwright. M2b starts from here.
 
 ---
 

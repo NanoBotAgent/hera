@@ -62,6 +62,25 @@ section fills in as milestones land.
   `what_time_is_it` call would spend a round trip to learn something free, and would only be made
   by a model that already suspected it needed to. An IANA name rather than an offset, because an
   offset is wrong twice a year.
+- **A scratchpad, per conversation.** Somewhere to put a plan, an intermediate result, a list of
+  what has been checked so far — `hera__scratch_write`, `hera__scratch_read` and
+  `hera__scratch_list` over `~/.hera/chats/<chat id>/scratch/`. It is hers rather than something
+  you read, and the win is the *next* turn: she picks up where she left off without the whole
+  thing being replayed through the context window. `hera__note` keeps the description it has and
+  stops being reached for as working memory, which is what it was actually being used as. Deleting
+  a chat deletes the directory, because a cache that outlives what it belongs to is litter.
+- **You can see what she is calling while she is still writing it.** A tool call used to reach the
+  browser only once the whole thing had arrived, so a turn spent the entire time it took to write a
+  long argument showing nothing at all — and the model's name for the call is in the *first* stream
+  fragment. The gutter now draws the row as soon as she names it and fills in what she called it
+  with when the arguments land. Streamed and never stored: a call the stream broke off mid-argument
+  never ran, and the stored list is the record of what happened.
+- **A tool call knows which conversation it is in.** Nothing could, before: her server is built
+  once at startup and every call runs in a worker task created when the server connected, so the
+  obvious `contextvars` answer reads back *empty* rather than failing. It travels in MCP's `_meta`
+  now — never in the arguments, because the model chooses those and would invent a chat id, and a
+  `Context` parameter is kept out of the tool's schema entirely so there is nothing to invent.
+  `hera__remember(scope="chat")` has been missing exactly this since 0.1.0.
 - **One selector, and one popup.** `Select.svelte` replaces every dropdown in the application. The
   trigger is the composer's pill — the shape that was already right — and the popup is the *skill
   picker's*: raised surface, hairline, large radius, the same shadow, a brass check on the chosen
@@ -72,6 +91,27 @@ section fills in as milestones land.
   arrows walk it, Home and End jump, Escape closes and hands focus back.
 
 ### Fixed
+
+- **A long answer could end with “did not answer in time”.** The read timeout was three minutes and
+  is now ten, and it is editable on Settings → Models rather than only by hand in `config.toml`. It
+  never was a limit on how long an answer may take — it is measured between one piece of the
+  response and the next, so what it bounds is *silence*: loading the weights, and working through a
+  prompt that has grown a skill body and six rounds of history. Three minutes was not enough for a
+  local 35B asked to write a whole page, and what that looked like was a failure under an answer
+  that had been going fine.
+- **A turn that failed could not be tried again.** *Copy* and *Try again* were drawn by the same
+  rule, and that rule required something to copy — so an answer that failed before she had said
+  anything offered neither, which is the one message a person is looking at wanting to retry.
+  Copy is about the answer and needs one; try again is about the question and does not.
+- **A setting you never chose was still recorded, and then outranked its own improvement.**
+  `config.toml` is seeded on first run and wins afterwards, which is right — but it was seeded
+  with *every* field, so it captured the defaults of whichever version wrote it first and no
+  later improvement could reach an existing install. That is why raising the timeout above did
+  nothing on a machine that had already run Hera. Values you have not set are no longer written
+  down; ones you set still are, and still win.
+- **Her own tool names were clipped in the activity gutter.** `scratch write` and `scratch read`
+  both came out as `scratch …`, so the two rows a reader most needs to tell apart were the two the
+  column made identical.
 
 - **`PATCH /projects/{id}` could not clear a default profile.** The route tested
   `default_profile_id is not None`, which is right for every other field on that body and wrong for
@@ -117,8 +157,7 @@ section fills in as milestones land.
   discovering one), rendered as Mermaid, Markdown, code or sandboxed HTML.
 - **Skill resources become readable.** `hera_skillsets` already tells the model a skill has files
   beside it; `hera__read_resource` makes that sentence true, which is what Anthropic's
-  reference-heavy skills need. Script-running skills report honestly instead — running code is
-  `hera_sandbox`, and it is not this version.
+  reference-heavy skills need.
 - **`hera_memories`.** Retrieval with per-tier caps, write-dedup, hit counts. `hera__remember` stops
   answering "not available in this deployment", and the embedder seam v0.1 left open closes.
 - **`hera_promptevo`.** Dreaming, proposing to evolvable mind regions and to memory. Every proposal

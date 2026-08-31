@@ -5,7 +5,8 @@ and none of it is settled — nothing below has an ADR, and several of these wan
 code is written. `docs/frontend.md` is the model: a document you argue with, until the argument
 is over and it becomes a rule somewhere else.
 
-**Last updated:** 2026-08-27 · after the first real sessions with the v0.1 spine
+**Last updated:** 2026-08-28 · §§ 2, 3 and 5 have decision records now — 12, 15 and 13. § 2 is
+built; § 5 is next; § 3 is written down and scheduled for v0.3
 
 The item that started this page — *she cannot look anything up* — is now done: `hera__search`
 exists and § 1 is kept as the reasoning behind its shape rather than as a request. What is left
@@ -72,6 +73,29 @@ What was settled along the way, and what `fetch` still has to answer:
 
 ---
 
+## 2. Notes as a scratchpad, per chat — ✅ decided, as [ADR 12](adr/0012-a-chat-has-a-scratchpad.md)
+
+**The open questions below are answered there.** In short: a **directory** per chat at
+`~/.hera/chats/<chat id>/scratch/`, not one `NOTE.md` — because the second thing she wants to write
+clobbers the first, and a plan and the draft it produced are two files by nature. The person does
+**not** see it, so it is a cache and is said to be one: deleting a chat deletes it. It does **not**
+survive into the prompt; she calls
+`hera__scratch_list` when she wants to know what she left herself, which keeps the context-budget
+question with the compaction work where it belongs. And `hera__note` keeps the description it has,
+so the two stop overlapping.
+
+What that section did not see coming is the thing that turned out to block it: **no tool could know
+which chat it was in.** Her server is built once at startup and `hera_tools` runs every call as a
+child of a worker task created at *connect* time, so the obvious `contextvars` answer reads back
+empty and does so silently. It goes in MCP's `_meta` instead — and that mechanism, rather than the
+files, is why this section had to come first: § 5 needs it too, and so does
+`hera__remember(scope="chat")`, which has been missing it since v0.1.
+
+The last paragraph below was right and cost nothing to honour: writing and reading share the quill.
+
+<details>
+<summary>The original argument, kept for the reasoning</summary>
+
 ## 2. Notes as a scratchpad, per chat
 
 `hera__note` writes "a document into the notes the person keeps", and `NoteWriter` is unwired.
@@ -112,6 +136,8 @@ What it needs decided:
   rather than split, because the reader's question is *did she write something down*, not which
   call carried it.
 
+</details>
+
 ---
 
 ## 3. Three MCP servers, eventually
@@ -123,9 +149,16 @@ difference, and it stays true here). The proposal splits the server side three w
 |---|---|
 | **`hera_mcp`** | What makes her Hera: stance, memory, notes, skills, and search. Exists |
 | **`hera_code_mcp`** | The tools a coding task wants — reading and editing a tree, running a build, reading diagnostics. Later |
-| **`hera_sandbox`** | Somewhere to actually run the code. Later |
+| **`hera_sandbox`** | Somewhere to actually run the code. **Designed** — [ADR 15](adr/0015-running-code-in-a-container.md) — and **scheduled for v0.3**, not v0.2 |
 
-Both new ones are v0.2 at the earliest and neither should be started before `fetch` does.
+`hera_code_mcp` is still later, and the sandbox would not smuggle it in: `sandbox__run` runs one
+command over one directory and knows nothing about a repository.
+
+**The sandbox was moved into v0.2 and moved back**, and the reason is the useful part: it looked
+like a prerequisite for artifacts and it is not. An `html` artifact is a sandboxed `iframe` in the
+browser, not a container on the host, and none of the other kinds is executable either. What
+running code is actually load-bearing for is the *script-running* half of Anthropic's skills, which
+is a smaller prize than a Docker dependency and a security claim to keep true.
 
 The reason to write it down now is the *boundary*, because getting it wrong is expensive later:
 these are three servers, not three sections of one, and the client mounts each under its own
@@ -139,6 +172,14 @@ that would run code somebody else wrote, and "small sandbox for testing" and "sa
 same claim. A container with no network and a mounted scratch directory is the cheap version.
 Anything stronger is a project. It should not be built until somebody has written down which of
 those two it is.
+
+**Somebody has, and it still is not built.** [ADR 15](adr/0015-running-code-in-a-container.md) answers *the cheap version,
+built carefully* — no network, read-only root, dropped capabilities, a non-root user, memory, pid
+and cpu ceilings, a host-side timeout, and never the Docker socket. It says plainly that a shared
+kernel means this is not a defence against a container escape, and names what would upgrade the
+claim. The paragraph above was not a delay, it was a demand for that record — and writing it turned
+out to be the whole of the value, because it also made clear that nothing in v0.2 needs the thing.
+The "mounted scratch directory" guessed at here is § 2's, which is the one part that did ship.
 
 ---
 
@@ -213,6 +254,29 @@ What has to be decided:
 
 ---
 
+## 5. Artifacts — ✅ decided, as [ADR 13](adr/0013-an-artifact-is-a-file-she-publishes.md)
+
+Most of this held: **an artifact is a tool call**, not something the interface discovers in her
+prose, and the last paragraph's warning about storage was the most important sentence on the page.
+Three things the record settles differently:
+
+- **It is a file in `~/.hera/chats/<chat id>/artifacts/`**, a directory of its own beside § 2's
+  scratchpad. Not the same directory with a flag: the scratchpad is somewhere she can think out
+  loud *unread*, and a directory a person browses for the deliverable is one she has a reason to
+  be tidy in.
+- **The interesting part is not revision, it is `edit`.** This section said *"the value is in
+  'change the third step' not re-emitting the whole thing"* and then asked for versions, which do
+  not deliver that. A find-and-replace does, and re-emitting a 40 KB page turned out to be the
+  thing actually failing against a real endpoint. Nothing is versioned; the same name replaces.
+- **A chart is an artifact too, and it renders inline.** `inline=True` draws it where she made it,
+  which is what a flow chart explaining the paragraph above it needs. From the event, never from
+  her prose, so ADR 11 is intact.
+
+*"Do not build the executor first"* was right, and is still right.
+
+<details>
+<summary>The original argument, kept for the reasoning</summary>
+
 ## 5. Artifacts
 
 Nothing in the system today can produce **a thing** — a document, a workflow definition, a
@@ -237,6 +301,8 @@ This is the largest item here and the least specified. What is clear:
 
 Nothing here should start before the scratchpad question is answered, because they want the same
 storage and answering them separately produces two.
+
+</details>
 
 ---
 
@@ -269,11 +335,23 @@ mojibake problem again in a new coat. It should say what it could not read.
 
 ## The order
 
-1. ~~**Search.**~~ Done. **Fetch** is next and is the other half of it — she can find a page and
-   cannot read it, which is a worse place to stop than either end.
-2. **PDFs**, because it is scoped for v0.1.0 and is a day's work in the browser.
-3. **The scratchpad**, which unblocks artifacts by answering where a document lives.
-4. ~~**Asking emotions**~~ — done, as `hera__ask`. It generalised the permission path, which is
-   what § 4 said it should.
-5. **Artifacts**, which needs a design document of its own before it needs a branch.
-6. **`hera_code_mcp` and `hera_sandbox`**, which are v0.2 and should not be started early.
+Rewritten once v0.2 M2 took shape, because the dependencies turned out to run the other way from
+how this list first guessed. The chain is **scratchpad → artifacts**, and the sandbox is not
+in it at all: none of the artifact kinds need code execution, so the thing that looked like a
+prerequisite turned out to be a separate feature with its own schedule.
+
+1. ~~**Search.**~~ Done. ~~**Asking emotions**~~ — done, as `hera__ask`; it generalised the
+   permission path, which is what § 4 said it should.
+2. ~~**The scratchpad**~~ — decided, [ADR 12](adr/0012-a-chat-has-a-scratchpad.md), and it is v0.2
+   M2a. It unblocks the two below by answering where a document lives, and by making a tool call
+   able to know which chat it is in at all.
+3. **Artifacts** — decided, [ADR 13](adr/0013-an-artifact-is-a-file-she-publishes.md), plus
+   skill resources ([ADR 14](adr/0014-skill-resources-are-readable.md)). M2b.
+4. **Fetch**, which is the other half of search — she can find a page and cannot read it, which is
+   a worse place to stop than either end. Wants the same *turn this document into text* seam as
+   PDFs, and a permission rule about the **argument** rather than the tool.
+5. **PDFs**, scoped for v0.1.0 and still roughly a day's work in the browser.
+6. **The sandbox** — designed, [ADR 15](adr/0015-running-code-in-a-container.md), scheduled for
+   v0.3. Ahead of the two below it because the decision is already made.
+7. **`hera_code_mcp`**, which is the one thing on this page still without a record and should not
+   be started early.
