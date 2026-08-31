@@ -1,5 +1,0 @@
-.svelte-kit
-build
-node_modules
-openapi.json
-src/lib/api/schema.d.ts
