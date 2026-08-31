@@ -1,0 +1,3 @@
+User-agent: *
+Disallow:
+Sitemap: https://voideuw.github.io/hera/sitemap.xml
