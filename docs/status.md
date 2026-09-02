@@ -1,338 +1,78 @@
 # Status
 
-Where the rebuild stands and what is settled, so a new session can pick up without re-reading
-the history. Updated as milestones land — this file is a snapshot, not a changelog.
+Current state of the rebuild, so a new session can start without re-reading history. A snapshot,
+not a changelog — historical detail and full rationale live in `versions/` and the ADRs.
 
-**Last updated:** 2026-08-31 · **Version:** v0.2.0 tagged, v0.2.1 in progress · **Strategy:** thin spine first, then deepen
+**Updated:** 2026-08-31 · **Version:** v0.2.0 tagged, v0.2.1 in progress · **Strategy:** thin spine
+first, then deepen
 
-**v0.2.1 has started with the two changes that were waiting on each other**
-([versions/v0.2.1.md](versions/v0.2.1.md) § 4, now decided as
-[ADR 17](adr/0017-a-stance-is-a-sentence-and-a-question-stands-alone.md)): **`hera__ask` stands on
-its own**, and **the emotions are gone**. In that order, because the only thing coupling them was
-`ask`'s `kind`, which read from the stance vocabulary and picked the colour the question card was
-drawn in — shortening or removing that list first would have broken a card with nothing to do with
-stances.
+## Now: v0.2.1
 
-What it turned up:
+Two coupled changes, landed in this order because `hera__ask`'s `kind` used to read from the
+stance vocabulary ([versions/v0.2.1.md](versions/v0.2.1.md) § 4,
+[ADR 17](adr/0017-a-stance-is-a-sentence-and-a-question-stands-alone.md)):
 
-- **The observation that started it could only be made against a real model, and the fix could not
-  be tested against one.** Fourteen stances, several firing on the same occasion, chosen at random
-  from outside — none of that is visible to a test, and none of what replaces it is either, because
-  what replaces it is nothing. The suite can only pin the *absence*: `emotion` is not in
-  `TOOL_NAMES`, `GET /emotions` is a 404, and both have a test, for the reason the absent
-  `artifact_list` and the absent memory-listing tool have one.
-- **A closed set in the schema is a different promise from a closed set in the prompt.** `ask`'s
-  `kind` was a free `str` documented against an editable list; it is a `Literal` now, so the SDK
-  puts the three words in the tool's own input schema and there is nothing to invent. The prompt
-  section that used to carry the vocabulary is gone with it — which is the opposite of the reasoning
-  that put the emotion list in a slot, and correctly so: that list was *editable* and this one is
-  not.
-- **`AnswerRequired.kind` had to stay a plain `str`, and it is the same call `ToolResultEvent.failure`
-  made.** A `Literal` there would make every turn persisted before the set was closed fail to load —
-  an event list is a record of what happened, so it has to keep parsing after the tool that produced
-  it has changed. The card draws an unrecognised kind as nothing rather than as the raw word: the
-  only way to get one is an old turn carrying a stance, and *doubt* on a question card is a puzzle.
-- **`hera__ask` had no test in `hera_mcp`'s own suite at all.** It was built with the turn that
-  suspends on it, so everything asserted about it lived in `hera_chats` and `apps/core` — and the
-  one thing those cannot see is the tool standing alone, which is exactly what this change was
-  about. It has one now, including that running it outside a turn says the question was not put to
-  anybody.
-- **A tool name used as a fixture is a fact about the system to whoever greps for it.** `hera__emotion`
-  was scattered through `hera_providers`, `hera_permissions` and `hera_tools` as an arbitrary example
-  name, and the toy server in `hera_tools`' suite had an `emotion` tool on it. All renamed —
-  otherwise the first thing anybody looking for the removed tool finds is thirty hits suggesting it
-  still exists.
-- **Three documents disagreed about what `hera__ask` is *for*.** `docs/tooling.md` § 4 is still
-  headed by the argument for making it an argument to `emotion`; the separate-tool decision it
-  reached turned out to be worth more than its own reasoning knew, because the feature a person
-  actually uses survived the removal of the one nobody did. Kept as written, with a note.
+1. **`hera__ask` stands alone.** `kind` is now a closed `Literal["unsure", "blocked", "choice"]`
+   in the tool's own schema — enforced by the SDK, so the prompt no longer spells out a
+   vocabulary. `AnswerRequired.kind` stays a plain `str` so turns persisted before the set closed
+   still load.
+2. **Emotions/stances are gone entirely** ([ADR 17](adr/0017-a-stance-is-a-sentence-and-a-question-stands-alone.md),
+   supersedes [ADR 3](adr/0003-emotions-as-tool-calls.md)). `hera__emotion`, the stance
+   vocabulary, and the emotion card are removed. Nothing replaces them — a model that thinks
+   something is wrong says so in prose.
 
-**v0.2.0 shipped** ([versions/v0.2.0.md](versions/v0.2.0.md)) — *organise → produce → remember*:
-projects, the scratchpad, artifacts, memory. Three of the five planned milestones; the other two
-moved before the tag and both are written down rather than dropped.
+Notes from the change:
 
-**Dreaming moved to [v0.3.0](versions/v0.3.0.md)**, mid-version and on purpose. The milestones under
-it want to be stable before anything starts proposing changes to them, and this is the release Hera
-has to be usable daily for. It is also the only one of the five that costs nothing to defer: every
-dependency arrow points *into* dreaming and none point out, so there is no half-built seam left
-behind — `hera_profiles.propose()` and the `evolvable` tier already exist and already guard what it
-would touch. Settings → Dreaming stays a listed, disabled tab, because a feature you can see coming
-is a promise and one you cannot is a surprise.
+- Only the *absence* is testable (`emotion` not in `TOOL_NAMES`, `GET /emotions` → 404) — the
+  original problem needed a real endpoint to observe and can't be regression-tested either way.
+- `hera__ask` had no standalone test before this (only integration coverage via `hera_chats` /
+  `apps/core`); it has one now, including a call made outside a turn.
+- Every fixture/toy-server double named `emotion` was renamed, so a grep for the removed tool
+  doesn't return dozens of unrelated hits.
+- `docs/tooling.md` § 4 still argues for the old direction (`emotion` with an argument) — left as
+  written, with a note: the separate-tool conclusion it reached turned out right for reasons the
+  doc didn't know yet.
 
-**The redesign pass moved to [v0.2.1](versions/v0.2.1.md)**, with the `⌘K` palette, hotkeys and
-`hera__read_resource`. The one part of M3 anything depended on — the drawer — was built early with
-artifacts, and memory reuses that frame rather than bringing its own, which was the milestone's
-load-bearing claim. What is left is polish, and it gets a better argument against a build that has
-every capability in it. **The milestone numbers stay as they are**: M4 still means memory, because
-renumbering would make every commit message and entry in this file that says M4 wrong.
+## Timeline
 
-v0.3.0.md also holds the first note on **`hera-code`**: a coding CLI built on this workspace's
-packages, with its own built-in MCP server, that Hera reaches as an ordinary `mcp.json` entry. The
-part worth knowing before starting anything is that it may need **no new mechanism in Hera at all**,
-and that it is the first thing that can *test* rather than assert CLAUDE.md's claim that
-`hera_storage` and `hera_prompts` stay liftable into an unrelated project.
+| Version | State | Notes |
+|---|---|---|
+| v0.1 | shipped | spine: message in → model boundary → router → mind → turn orchestrator → SSE out |
+| v0.2.0 | **tagged** | organise → produce → remember: projects, scratchpad, artifacts, memory (3 of 5 planned milestones — the other two moved, not dropped) |
+| v0.2.1 | in progress | polish: `⌘K` palette, hotkeys, `hera__read_resource`, ADR 17 |
+| v0.3.0 | planned | dreaming, sandbox, `hera-code` — see [versions/v0.3.0.md](versions/v0.3.0.md) |
 
-**M1 and three fixes are on `main`**, merged bottom-up as #10 → #11 → #12 → #13:
+Dreaming and the redesign pass both moved out of v0.2.0 on purpose — dreaming because every
+dependency arrow points *into* it and none out, so deferring it leaves no half-built seam; the
+redesign pass because its one load-bearing part (the drawer) was already built early with
+artifacts. See [versions/v0.2.0.md](versions/v0.2.0.md) for the full reasoning.
 
-| Landed as | What it was |
-|---|---|
-| #10 `feat/project-folders` | **M1.** Projects you can make, rename, remove and move chats between; the project screen at `/project/<id>`; `Select.svelte`, which is now every dropdown in the application |
-| #11 `fix/mind-error-and-uncertainty` | **Two mind regions the model asked for** — `uncertainty` and `correction` — plus `hera__ask`, without which the first is advice she cannot act on; **the date in every prompt**; the boot guard below |
-| #12 `fix/linear-turn-order` | A turn renders in the order it happened, rather than every gutter row and then all the prose |
-| #13 `fix/repeated-tool-calls` | An identical call runs at most twice a turn, and spending the tool budget ends with an answer instead of a half-sentence |
+## v0.2.0 milestones
 
-**They were stacked rather than independent, for a concrete reason worth keeping.** Migration
-`0004` lives on the first, so a `~/.hera` used to review it is stamped `0004`; checking out a
-branch without that revision made alembic refuse to boot with `Can't locate revision identified
-by '0004'`. Two branches that both touch the schema cannot be reviewed against one data
-directory unless the later one contains the earlier, and everything after inherits the same
-constraint — so they merged bottom-up, each rebased onto `main` after the one below it squashed.
-`boot.check_revision` now catches that class of mismatch and says what to do rather than raising
-alembic's stack trace.
+| Milestone | Status | Branch | What shipped |
+|---|---|---|---|
+| M1 Projects | ✅ merged (`main`) | `feat/project-folders` (#10) | project CRUD, `/project/<id>`, `Select.svelte` (now every dropdown) |
+| — | ✅ merged | `fix/mind-error-and-uncertainty` (#11) | `uncertainty`/`correction` mind regions, `hera__ask`, date-in-prompt, boot guard |
+| — | ✅ merged | `fix/linear-turn-order` (#12) | turn renders in event order, not gutter-rows-then-prose |
+| — | ✅ merged | `fix/repeated-tool-calls` (#13) | identical call capped at 2/turn; budget exhaustion ends in an answer |
+| M2a Scratchpad | ✅ | `feat/chat-scratchpad` | per-chat scratch dir — [ADR 12](adr/0012-a-chat-has-a-scratchpad.md) |
+| M2b Artifacts | ✅ | `feat/chat-artifacts` | `artifact_create/edit/read` — [ADR 13](adr/0013-an-artifact-is-a-file-she-publishes.md) |
+| — | ✅ | (stacked on M2b) | skill resources — [ADR 14](adr/0014-skill-resources-are-readable.md) |
+| M4 Memory | ✅ | `feat/memories` | markdown-file memories — [ADR 16](adr/0016-a-memory-is-a-file-and-all-of-them-are-in-the-prompt.md) |
+| Sandbox | ❌ dropped, replanned | — | not needed for M2b after all; scoped as [ADR 15](adr/0015-running-code-in-a-container.md), scheduled v0.3 |
 
-**A squash merge makes the branch above it lie.** `mergeStateStatus: CLEAN` means no conflicts,
-not a correct diff: a branch still based on the pre-squash tip proposes to *undo* whatever exists
-only in the squash. Checking `git diff --name-status origin/main HEAD` for deletions before each
-merge is what caught `.gitkeep` going missing, and it is worth doing every time.
+**PR stacking.** Branches were stacked, not independent: each carries an alembic migration on top
+of the last, and a `~/.hera` used to review one branch needs every migration below it. Merged
+bottom-up, each rebased onto `main` after the one below it squashed. `boot.check_revision` now
+gives a clear error instead of alembic's raw traceback when a checkout skips a revision. Also:
+after a squash merge, `mergeStateStatus: CLEAN` does not mean a correct diff for a branch still
+based on the pre-squash tip — check `git diff --name-status origin/main HEAD` for deletions
+before every merge.
 
-**M2 is built, and it was two branches rather than one**, split where
-[tooling.md](tooling.md) § 5 said it had to be: artifacts and the scratchpad want the same storage,
-and answering them separately produces two. Skill resources are a third, stacked on top.
-
-| | |
-|---|---|
-| **M2a** | ✅ The scratchpad, and a tool call that knows which chat it is in — [ADR 12](adr/0012-a-chat-has-a-scratchpad.md) |
-| **M2b** | ✅ Artifacts — [ADR 13](adr/0013-an-artifact-is-a-file-she-publishes.md) · then skill resources — [ADR 14](adr/0014-skill-resources-are-readable.md), on a branch of their own |
-
-**ADR 13 took three drafts and none of the first two were built on**, which is the cheapest place
-for that to happen. Draft one made an artifact a versioned object with its own package and tables —
-a second store, a day after ADR 12 built the first, which `tooling.md` § 5 had explicitly warned
-about. Draft two made it a scratchpad file with a bit set on it, which is cheaper and wrong about
-what the scratchpad is for: a notes directory a person browses is one she has a reason to be tidy
-in. Both answered *where do the bytes go* and let *what a person sees* fall out of it, and it does
-not fall out.
-
-What shipped as the decision: **an artifact is a file she publishes**, in
-`chats/<id>/artifacts/` beside the scratchpad. The filename is the identity, the extension is the
-kind, and three tools — `create`, `edit`, `read` — make it. `edit` is a find-and-replace that must
-match exactly once, and it is the load-bearing one: re-emitting a 40 KB page to change a colour is
-minutes of generation and is what has actually been failing against the real endpoint. `inline`
-decides whether it is drawn in the conversation (a flow chart) or opened in the drawer (a page).
-No index, no tables, no versions.
-
-**A third stage was planned and dropped, and the reason is worth keeping because the mistake is
-easy to make twice.** The sandbox was pulled forward from *not in v0.2* on the assumption that
-artifacts needed somewhere to run code. They do not: `markdown`, `code`, `mermaid`, `html` and
-`svg` are content, and an HTML artifact is a sandboxed `iframe` in the browser rather than a
-container on the host. Running code is load-bearing only for the *script-running* half of
-Anthropic's skills, which is a smaller prize than a Docker dependency and a security claim to keep
-true. [ADR 15](adr/0015-running-code-in-a-container.md) is written and stands — it answers the
-question § 3 refused to let the work start without — and it is scheduled for **v0.3**.
-
-**The thing that blocked both, and was not obvious:** no tool can know which chat it is in. Her
-server is built once at startup with its ports bound, and `ManagedServer` runs every call as a
-child of a worker task created at *connect* time — so a `contextvars.ContextVar` set around the
-turn reads back empty in the tool, silently. It travels in MCP's `_meta` instead:
-`ToolRegistry.dispatch` takes an opaque `context` mapping, `hera_mcp`'s tools take a `ctx: Context`
-the SDK keeps out of the input schema, and the key travels through `ChatsSettings.chat_meta_key`
-the way `hera__ask`'s name travels through `asking_tools`. Verified against the SDK before any of
-it was designed around. `hera__remember(scope="chat")` has been missing exactly this since v0.1.
-
-**M2a is built**, on `feat/chat-scratchpad` off `main`. What it turned up:
-
-- **The `_meta` mechanism had to be verified against the SDK before it was designed around**, and
-  it holds: `client.call_tool(..., meta=…)` arrives at `ctx.request_context.meta`, and a
-  `ctx: Context` parameter is **excluded from the tool's input schema** — so the model does not
-  see a `chat_id` field and cannot fill one in with a guess. There is a test asserting the schema
-  has exactly `name`, `text` and `append` on it, because that exclusion is the whole safety
-  argument and it is somebody else's behaviour.
-- **A hand-built container drifts from `build_services` silently.** The suite assembles `Services`
-  itself rather than calling the real wiring, so it was missing `chat_meta_key` — the turn ran,
-  every call succeeded, and the only symptom was her scratchpad answering *this call is not part
-  of a conversation* in the middle of a working conversation. `apps/core/tests/test_wiring.py` is
-  the guard, and it drives the real registry rather than inspecting the wiring: a
-  `scratchpad=` argument can be present and be `None`.
-- **The containment check runs after `resolve`, not on the string.** A symlink in the scratchpad
-  is a traversal that every string check reads as an ordinary filename, so both the write and the
-  read are refused through it — refusing one and allowing the other would make the scratchpad a
-  file reader for anything a link already points at.
-- **A size refusal happens before the file is opened.** `open("wb")` truncates, so a check after
-  it would answer *no* and destroy the plan in the same call.
-- **The toy server in `hera_tools`' suite grew a tool**, which broke two tests asserting a count
-  of 2 on an unrelated server. `TOY_TOOL_COUNT` now, so a test about a server being *unreachable*
-  does not fail because a tool was added to the reachable one beside it. Same move on
-  `apps/core`'s catalogue assertion, which now reads `hera_mcp.TOOL_NAMES` rather than six
-  literals — spelled out, that test fails every time a tool is added and the fix is always to
-  paste the name in.
-
-**Three things came off the back of driving it against a real endpoint**, and all three are on the
-same branch:
-
-- **A tool call is announced before it is finished.** `tool_call_started` is a new
-  `hera_providers` variant carrying the id and the name, emitted from the stream fragment that
-  *names* the call rather than from the one that completes it. Until this, a turn spent the whole
-  of a long argument with nothing on screen — and an artifact whose content is a 40 KB document is
-  exactly that case, so this is a prerequisite for M2b rather than a nicety. It is **streamed and
-  never persisted**, which makes the reducer's contract explicit: a reload has strictly fewer
-  events and has to draw the same rows, and it does, because the started row and the ready row are
-  one row keyed on the call id.
-- **The gutter's verb column was too narrow for her own tool names.** `scratch write` and
-  `scratch read` both clipped to `scratch …`, so the two rows a reader most needs to tell apart
-  were the two it made identical. The column comment had predicted this exact failure; 8em now.
-- **The read timeout was three minutes and is ten**, and it is editable on Settings → Models rather
-  than only in `config.toml`. It is not a limit on how long an answer may take: httpx measures it
-  between one piece of the response and the next, so what it bounds is *silence* — loading the
-  weights, and prefilling a prompt that has grown a skill body and six rounds of history. A local
-  35B asked for a whole HTML page fell off the end of three minutes, and what a person saw was
-  `did not answer in time` under an answer that had been going fine.
-- **Raising that default did nothing, which was the more interesting bug.** `config.toml` is
-  seeded from the environment on first run and *every* field is dumped, so the file records the
-  defaults of whichever version wrote it first — and the file wins afterwards. Every default this
-  project ever improves is therefore silently dead for anybody who has already run Hera. It
-  surfaced as `timeout_s = 180.0` sitting in a real install that nobody had ever chosen it for.
-  `config.TUNING_FIELDS` is now omitted on write unless it differs from the default, so the file
-  means *what I decided* rather than *what the defaults were the day I installed it*. A value
-  somebody sets is still written and still wins. The endpoint's own fields are always written,
-  because they are what you came to the file to read.
-- **A failed turn could not be tried again.** `actionable` gated Copy and *Try again* on the same
-  flag, and that flag required something to copy — so a turn that failed before she said anything
-  had no controls at all, which is the one case a person is staring at wanting to retry. Copy is
-  about the answer and needs one; **try again is about the question and does not.** Found by
-  scripting a mid-stream `ProviderTimeout` and driving a real browser at it, which also gave
-  `FakeProvider` the ability to raise from *inside* a turn — an unreachable endpoint and a
-  connection that breaks half way through close a turn differently, and only the first was
-  scriptable before.
-
-**M2b's first half is built**, on `feat/chat-artifacts` off `feat/chat-scratchpad` — stacked for
-the reason above, since a `~/.hera` used to review it is stamped by the same migration. What is on
-it is **artifacts**; [ADR 14](adr/0014-skill-resources-are-readable.md)'s `hera__read_resource` is
-a branch of its own on top, because the two share nothing but the name guard and reviewing them
-together would put two unrelated features in one diff.
-
-`hera__artifact_create`, `hera__artifact_edit` and `hera__artifact_read` over
-`~/.hera/chats/<id>/artifacts/`, a card in the transcript, and the drawer beside it. What it turned
-up:
-
-- **The card needs no new event variant, and that was verified before it was designed around** —
-  the same discipline `_meta` got in M2a. A tool body may return `CallToolResult` carrying
-  *readable text for the model* and *`structured_content` for the interface* in one result, with no
-  output schema published, and `hera_tools` → `hera_chats` already carry it into
-  `ToolResultEvent.structured`. `test_wiring.py` asserts it survives the whole path, because if it
-  were dropped anywhere every artifact would still be written correctly and none would appear.
-- **`edit` deliberately returns no card**, and the SDK's behaviour is why the interface keys on the
-  *presence of the artifact key* rather than on structure at all: a tool returning a plain string
-  gets `{"result": …}` derived for it, so "has no structured content" is not a state a tool can be
-  in.
-- **A call's *arguments* are replayed under every later question**, which ADR 13 missed while
-  keeping content out of the *result* for exactly that reason. A 40 KB page published in turn four
-  was in the prompt of every turn after it, forever — and `scratch_write` has had the same shape at
-  up to a megabyte since M2a. `build_history` now shortens a string argument past
-  `ChatsSettings.max_history_argument_chars`; `turn_to_messages` does not, because the turn in
-  progress is still working on what it just wrote. A rule about **size**, not about tool names:
-  `hera_chats` may not learn which tools are hers.
-- **`effect_update_depth_exceeded` for the third time, in a new shape.** A store method that bumps
-  a counter *reads* that counter, so calling it from an `$effect` makes the effect depend on what
-  it writes — Svelte gives up rendering the page mid-turn with nothing on screen to say why. Found
-  by driving a real browser: the card appeared, the rest of the turn never did. `untrack` at the
-  call site, and a plain (non-reactive) `Set` in the store so the same result is only ever noticed
-  once.
-- **An inline artifact grows after the scroll has already happened.** Its content is fetched by
-  name, so a chart is 300 px tall a moment after the event announcing it — by which time the
-  follow-the-answer effect has run and the sentence underneath has been pushed out of sight. A
-  `ResizeObserver` on the transcript column covers that, and everything later with the same shape.
-- **The API never serves an artifact as a document.** Content comes back as JSON and a download as
-  an attachment with `application/octet-stream` and `nosniff`; the browser builds the frame with
-  `srcdoc`, where it has an opaque origin. Serving what a *model* wrote as `text/html` from Hera's
-  own origin would undo the sandbox in one header, and it would be undone in a different file from
-  the one that looks like it owns the decision.
-- **`hera_core.scratch` is `hera_core.chat_files`**, holding both adapters and one `_resolve`.
-  ADR 13 asked for that explicitly: two copies of the check that makes both tools safe to allow
-  without a permission card is one copy too many, and the traversal test class is parametrised over
-  both rather than duplicated.
-- **A drawing is a replaced element, and a flex box squashes one.** An `<svg>` with `height: auto`
-  is a flex item whose cross size is `auto`, so `align-items: stretch` sets its height from the
-  *box* — and with a `max-height` above it, a 400 × 1400 flow chart was compressed to the panel's
-  height and then shrunk by `preserveAspectRatio` to a thumbnail in an acre of white. The container
-  is a plain block now, and the scroll it already had is what handles a chart taller than the
-  panel. Worth the entry because of how it presents: it looks like an artifact that came out
-  broken, not like a layout that is wrong, and there is nothing below a browser that can see it.
-  The e2e test asserts the *proportions* rather than the CSS.
-- **Mermaid stays out**, decided rather than forgotten: `.mmd` renders as a source figure that says
-  so. It is a 2–3 MB browser dependency and a second sanitising path, and an `.svg` is a drawn
-  chart today.
-
-And two things that came from using it rather than from building it: **the drawer opens by itself**
-when she publishes something that is not `inline`, only while the turn is streaming — a page is a
-thing you look at, and a reload should leave you where you left off rather than reopening a panel
-over the transcript you came back to read. And **the card carries its own save control**, because
-saving was the second thing anybody did with an artifact and it meant opening the drawer to reach
-the link.
-
-1115 tests at 98 % coverage, plus 117 vitest and 23 Playwright.
-
-**M4 is built** — memory, on `feat/memories` off `feat/chat-artifacts`, stacked for the same
-reason everything since M1 has been. The shape changed before the work started and
-[ADR 16](adr/0016-a-memory-is-a-file-and-all-of-them-are-in-the-prompt.md) is the record:
-**a memory is a markdown file and every enabled one is in the prompt.** One file per memory under
-`~/.hera/memories/<key>.md`, front matter in `SKILL.md`'s shape, the filename as the key, and no
-retrieval anywhere — because a memory that was stored and did not arrive looks exactly like one
-that was never stored, and neither the person nor the model can tell which happened. The cost is
-space, so the space is the feature: a ceiling in tokens, a bar on Settings → Memory, and switching
-one off keeps the file and gives the space back.
-
-What it turned up:
-
-- **A mind region had been telling her the opposite for a version.** `memory_instr` shipped with
-  *"What you were given from memory is what you happened to recall, not the whole of what you
-  know."* True of a design that ranked and capped, false of this one, and left in it would have
-  her hedge about facts she is looking at. Found by reading the prompt rather than by a test —
-  prose and code can disagree for a long time without anything failing.
-- **What is *missing* from the tool surface is the design, twice.** There is no tool that lists
-  memories, because every enabled one is already in her prompt and reading them back would spend
-  the context window on what is in it — the same reasoning that left `artifact_list` out in M2b.
-  And `hera__forget` does not delete: it switches a memory off and keeps the file, so **the only
-  thing in the system that unlinks one is a person on the settings screen**. Both have a test
-  asserting the absence, because an absence nobody pinned is an absence somebody adds back.
-- **`hera_memories` needed less than the layering table had already given it.** Its allow-list said
-  `hera_storage`, written when it was going to own a table; it owns a directory, so it is
-  `hera_home` now.
-- **The token count is an approximation and is named as one.** `ceil(len(text) / 4)`. A real count
-  needs the endpoint's own tokenizer, which changes when the model does, is not installed, and
-  would make the number on screen depend on which model is selected. The question the bar answers
-  — *how close am I* — survives being 15 % out, which is why the ceiling is not also a promise
-  about the context window.
-- **A nearly-empty bar has to still look like a bar.** At 15 of 4000 the fill is 0.4 % wide, and
-  the track had no outline — so the control read as a stray brass mark rather than as plenty of
-  room. Only findable by looking at it.
-- **The mark is a brain, and it had to be drawn wrong to look right.** It began as a knot in a
-  handkerchief; a knot is a promise to remember *later*, and what this marks is already in her
-  prompt. But a brain's defining feature is fine convolution, which is what dies at 13 px — two
-  drafts rasterised into a coin with a line across it. The shipped one exaggerates the scallops,
-  picked by rendering five candidates at 13, 15, 26 and 64 px side by side.
-- **Renaming what a gutter row shows broke a test that never mentions the gutter.** `remember`'s
-  subject moved from the text to the key, which put the key into the transcript — and the settings
-  suite was waiting on `text=runs-models-locally`, which then matched the conversation *behind* the
-  open modal and returned before the panel had loaded. Same shape as a second one: the transcript
-  has an **Edit** on every message, so a page-wide `get_by_role` reached through the modal. Every
-  assertion on that screen is scoped through the panel now.
-
-1206 tests at 98 % coverage, plus 112 vitest and 27 Playwright. (Down five vitest and two
-pytest with the emotion card: what those tests asserted was that a stance renders inline and is
-drawn once, and both properties moved to the question card, which already had them.)
-
----
-
-## The short version
-
-Hera is being rebuilt from an empty repository. The previous version — one FastAPI application
-with Jinja and HTMX, a German interface, a hand-written tool registry and a text call grammar
-around GPT-OSS-20B — is retired to [prototype.md](prototype.md) and is wrong about everything
-structural.
-
-The replacement is a **uv-workspace monorepo**: small libraries under `packages/`, and one
-application, `hera-core` at `apps/core/` — a FastAPI JSON/SSE API with the SvelteKit interface
-under `web/`, built into the directory the API serves. Tools come from **MCP servers**, know-how
-from **`SKILL.md` skills**, and the target model is **Qwen3.6-35B** exclusively.
+**Test counts by stage:** v0.1 905 tests/98% + 48 vitest + 10 Playwright → M2a/M2b 1115/98% + 117
+vitest + 23 Playwright → M4 (current) **1206 tests/98% + 112 vitest + 27 Playwright**. (Vitest and
+pytest both dropped slightly with the emotion card's removal — its two properties moved to the
+question card, which already had them.)
 
 ## Settled decisions
 
@@ -352,9 +92,9 @@ Each has a record in [adr/](adr/); read those before reopening one.
 | [10](adr/0010-chat-events-wrap-the-provider-union.md) | `ChatEvent` wraps `hera_providers.Event` | A skill selection, a tool result and a permission request are not model output. Two unions, one total mapping, still no parser — and `hera_providers` keeps its empty allow-list |
 | [11](adr/0011-markdown-and-tex-in-the-browser.md) | Her prose is typeset in the browser | Markdown and TeX are drawn as what they are. The rule that stands is about *structure*: what she did is always an event variant, never something read back out of text |
 
-Other constraints that are decided but did not need a record: English everywhere with an i18n
-seam; single-user login in v0.1 behind a multi-user-ready seam (`Depends(current_user)` on every
-route, `owner_id` on every row); desktop-shaped interface, installable as a PWA on the phone.
+Other constraints, decided but with no dedicated record: English everywhere with an i18n seam;
+single-user login in v0.1 behind a multi-user-ready seam (`Depends(current_user)` on every route,
+`owner_id` on every row); desktop-shaped interface, installable as a PWA on the phone.
 
 ## What exists
 
@@ -376,561 +116,282 @@ apps/core/web/            the SvelteKit interface, built into the directory the 
 tests/                    repository-level guards (see below)
 tests/e2e/                Playwright against the real application and FakeProvider
 .github/                  CI, CodeQL, release, templates, CODEOWNERS, dependabot
-docs/adr/                 eleven decision records
+docs/adr/                 seventeen decision records
 ```
 
-**The foundation and capability layers are on `main`.** `hera_tools` merged as #6/#8 — 450
-tests, 99 % coverage. `FakeProvider` means every layer built on top is testable without a model
-running. The whole suite is 571 tests at 99 % coverage.
+## Foundation (`hera_providers`, `hera_permissions`)
 
-**The whole of v0.1 exists and the spine runs**, on four stacked branches off `main`:
-`feat/hera-profiles`, `feat/hera-skillsets`, `feat/hera-chats`, `feat/hera-core`. A message
-typed into the browser reaches the model boundary through the router, the mind and the turn
-orchestrator, and comes back as Server-Sent Events the interface renders — verified in a real
-Chromium against `FakeProvider`, including that a reload shows exactly what was streamed.
+- **`hera_providers.events` is the whole contract.** A new model capability is one new event
+  variant, persisted by `hera_chats`, serialised by `apps/core`, rendered by its web app — never
+  a new parser. `EVENT_ADAPTER` round-trips a single event, so persistence goes through the union.
+- **A malformed tool call is not an exception.** Bad arguments arrive as
+  `ToolCallReady.parse_error`, fed back to the model to self-correct. Real failures — unreachable
+  endpoint, timeout, bad status, mid-stream disconnect — raise `ProviderError`; nothing from httpx
+  escapes. `StreamInterrupted` persists partial events and closes the turn `cancelled`.
+- **A tool call is announced before it finishes.** `tool_call_started` is streamed (id + name)
+  from the fragment that *names* the call, never persisted — the started row and the ready row
+  are one row keyed on call id, so a reload still renders correctly with strictly fewer events.
 
-905 tests at 98 % coverage, plus 48 vitest and 10 Playwright. Profiles brought `hera_home` with
-them: `HERA_HOME` had been resolved by `hera_tools.settings.hera_home()` with a note saying to
-lift it when a second package needed it, and the mind directory was that second package.
+## `hera_mcp` (the server she is)
 
-Two things worth knowing before building on the foundation:
+- Own package, separate from `hera_tools` (the client) — `hera_tools` never imports it.
+- `ToolRegistry.from_config(builtin=...)` mounts it under `server.name` ("hera"); nothing is
+  auto-mounted.
+- Tools: `ask`, `remember`, `note`, `skill`, `search` (`emotion` removed by ADR 17) — namespaced
+  `hera__*`, listed in `TOOL_NAMES`.
+- `ask` is never *run*: `hera_chats` intercepts it by name before dispatch; called outside a turn,
+  the body refuses.
+- `remember`/`note` are listed but answer "not available in this deployment" until their backing
+  packages exist — a model that can't see `remember` tells the person it can't remember, which
+  beats a silent stub.
+- `search` reaches DuckDuckGo through a `Searcher` port (`hera_core.search.DuckDuckGo`), no API
+  key needed. Stays **allowed by default policy**: a card per lookup (3–4 per real question) would
+  train click-through-without-reading; a `fetch` tool would deserve the card, `search` doesn't.
+- Tests use a real `mcp.Client` over the SDK's in-memory transport, opened per test rather than
+  via fixture (pytest-asyncio finalises fixtures in a different task than the SDK's task-affine
+  anyio group expects).
+- `hera_tools`'s own suite mounts a toy server, never hers — keeps "what fails is the client"
+  clean of her behaviour.
+- Verified against a real gateway too: `~/.hera/mcp.json` + Docker MCP Toolkit connects and
+  dispatches alongside her four tools; `apps/core`'s `TestARealMcpServer` fakes only the model.
 
-- **The event union is the contract.** `hera_providers.events` defines what a model can emit.
-  A new kind of thing the model can do is one new variant there, persisted by `hera_chats`,
-  serialised by `apps/core`, rendered by its web app — never a new parser. `EVENT_ADAPTER`
-  round-trips a single event, so persistence goes through the union rather than through each
-  variant.
-- **A malformed tool call is not an error.** Unparseable arguments arrive as
-  `ToolCallReady.parse_error` rather than as an exception, so one bad call does not discard the
-  calls that arrived beside it and the turn stays alive. Feed it back as a tool result and let
-  the model correct itself. Actual failures — unreachable endpoint, timeout, bad status, a
-  connection that breaks mid-answer — raise a `ProviderError`; nothing from httpx escapes. The
-  layer owning the turn catches them, because it is the only one that knows how much of the
-  answer already arrived. `StreamInterrupted` is the one to special-case: persist the partial
-  events and close the list with a `cancelled` turn.
+## `hera_tools` (the MCP client)
 
-### What `hera_mcp` settled
+- Above `ToolRegistry`, nothing raises — every outcome (denied/misnamed/unreachable/timeout/
+  failed) is a `ToolResult(ok=False, text=...)` the model can read and correct from.
+  `ManagedServer` below it still raises.
+- In-process servers aren't a special case — same client, same catalogue, same policy as remote
+  ones.
+- SDK is `mcp` 2.x. Note `httpx2` (the MCP SDK's own HTTP client), not `httpx`, for headers to a
+  remote server.
+- One client per worker task (anyio task groups are task-affine); calls queue to it, which keeps
+  parallel calls parallel.
+- A dead stdio server doesn't self-report: undetected, every later call fails forever with
+  `MCPError("Connection closed")`. Detected explicitly and the connection retired instead.
+- `~/.hera/mcp.json`: Claude-Desktop shape, `${VAR}` expansion, unset var is a hard error (a blank
+  credential fails later and less clearly).
 
-- **Her own server is its own package.** `hera_tools` is the **client** — subprocess lifetimes,
-  namespacing, timeouts, retries, true of anybody's MCP server. `hera_mcp` is the **server she
-  is**, and everything in it is a statement about what Hera can do: the three occasions `ask` is
-  worth stopping a turn for, the sentence the model reads before calling `remember`. Those change for unrelated reasons, and
-  v0.3 serves this one over a transport of its own so Claude Code can attach to her.
-- **The client no longer names her.** `ToolRegistry.from_config(builtin=...)` mounts the server
-  under `server.name`, so `"hera"` is written in one place. `open()` used to construct an
-  unwired copy of her server when given none; a default that quietly mounts four tools is
-  something you discover from a catalogue listing rather than from the call site, and it is
-  gone. Nothing is mounted unless the application mounts it.
-- **The tools were `emotion`, `ask`, `remember`, `note`, `skill` and `search`** — `hera__*` once
-  the client namespaces them, and `TOOL_NAMES` says so in code. `ask` is the one that is never
-  *run*: `hera_chats` recognises it by name before dispatch and suspends the turn, and the body on
-  the server refuses, which is what a caller reaching it from outside a turn deserves to be told.
-  `emotion` has since been removed entirely (ADR 17). Three were wired in v0.1: `ask`
-  needs nothing, `skill` reaches `hera_skillsets` through a port, and `search` reaches
-  DuckDuckGo through another. `remember` waits for `hera_memories` and `note` for somewhere to
-  put a document; both are still listed and answer "not available in this deployment", because
-  a model that cannot see `remember` concludes it cannot remember and tells the person so.
-- **`search` is the one that leaves the machine**, and it is the one whose absence changed what
-  she *said* rather than what she could do: with no way to look anything up she did not answer
-  "I cannot check that", she guessed fluently. `Searcher` is a port like the rest and
-  `hera_core.search.DuckDuckGo` is the adapter — no key, so a fresh install can search, and
-  swapping it for SearXNG is a class and one line of wiring. It stays **allowed** by the default
-  policy: a card before each of the three or four lookups a real question takes would be as
-  unusable as one per scratchpad write, and a search reads something public and changes nothing. A
-  *fetch* tool is the one that would deserve the card.
-- **Its tests use a real client, not a call to the function.** `mcp.Client` over the SDK's
-  in-memory transport, so the schema, the description and the `is_error` convention are part of
-  what is asserted. The client is opened per test rather than yielded from a fixture:
-  pytest-asyncio finalises an async fixture in a different task, and the SDK's client owns a
-  task-affine anyio group — the same trap `hera_tools` answers with a worker per server.
-- **`hera_tools`' own suite mounts a toy server** instead of hers. What fails there should be
-  the client; a stub called "hera" offering her tools would have been a copy of her server
-  living in the package that must not know about it.
+## `hera_profiles` (the mind)
 
-### MCP, end to end
+- **Date is in the prompt, not a tool** — UTC always, plus local time if `config.toml` names an
+  IANA zone (never a raw offset, which is wrong twice a year). A bad zone name degrades to UTC
+  silently at render time but is refused at the settings route.
+- **13 mind regions** (was 14 before ADR 17 removed `emotion_usage`). `uncertainty` and
+  `correction` were the model's own idea when asked to review its prompt; both sit under
+  `approach` (how she works a problem, not what she will/won't do), which also makes them
+  evolvable. `uncertainty` needs `hera__ask` to mean anything — they shipped together.
+- **Two write paths.** `MindRepository.write()` is the person's, opens every region including
+  `safety`. `.propose()` is everything else's, raises `RegionLocked` on an owner-fixed region —
+  the actual mechanism behind "add a rule without touching code."
+- Git backend is the `git` binary, not a library binding: init/add/commit/log/show,
+  `user.name`/`user.email`/`commit.gpgsign=false` pinned per invocation. Provenance rides a
+  `Hera-Origin` trailer.
+- A profile owns no text — only region toggles, overrides, traits, and skill pins by bare name.
+- **Gotcha:** `sqlalchemy.ext.mutable` does not work under SQLModel — `__setattr__` overwrites the
+  coerced `MutableDict`. `ProfileRepository.save()` flags the four JSON columns by name instead;
+  an in-place edit followed by a bare `session.flush()` is silently lost.
+- Everything synchronous, run in a worker thread by the turn orchestrator.
 
-Verified against a real gateway, not only against `FakeProvider`: `~/.hera/mcp.json` with
-Docker's MCP Toolkit (`docker mcp gateway run`, stdio) connects and contributes its tools
-alongside her four, and a dispatch round-trips — `docker__mcp-find` came back in 1.7 s,
-`hera__skill` in 24 ms. `apps/core`'s suite now has `TestARealMcpServer`, which runs a turn
-with a real `ToolRegistry` and a real `MCPServer` and fakes only the model, so nothing between
-the model and the tool is a stub.
+## `hera_skillsets`
 
-### What `hera_tools` settled
+- Retrieval works with **no model endpoint** by default (ADR 5): keyword overlap, IDF-weighted,
+  scored against the skill's own description length. `Embedder` is an optional port; a raising
+  embedder is treated as absent.
+- Skill identity is the **directory name**, not frontmatter `name` — a mismatch is reported, never
+  silently overridden.
+- **Gotcha:** `description: Use when: …` is invalid YAML (the colon breaks the parse) and would
+  silently drop the description. Frontmatter that fails to parse is re-read line by line and the
+  failure is reported to the author.
+- Nothing raises for bad content — a broken `SKILL.md` still loads carrying a `problems` list; a
+  directory with none becomes a `BrokenSkill`.
+- `missing` (pin, folder gone) and `dropped` (fit, didn't make the budget) are different fields
+  with different fixes.
 
-- **Above `ToolRegistry`, nothing raises.** Denied, misnamed, unreachable, timed out, or a tool
-  that failed on purpose — all of them are a `ToolResult` with `ok=False` and a `text` written
-  for the model to read and correct itself with. `ManagedServer` below it still raises, so it
-  is honest used on its own. A turn therefore needs no `try` around a tool call.
-- **An in-process server is not a special case.** It is reached over the SDK's in-memory
-  transport by the same client every other server is reached by, listed in the same catalogue,
-  checked by the same policy. Her own four tools are one of these and now live in `hera_mcp`;
-  this package neither imports it nor knows what is on it.
-- **The SDK is `mcp` 2.x**, whose `Client` accepts a URL, `StdioServerParameters`, a transport,
-  or a `Server` object for the in-process case. Note `httpx2`, not `httpx`: the MCP SDK ships
-  its own HTTP client library, and that is how request headers reach a remote server.
-- **A client is owned by one worker task.** anyio task groups are task-affine, so a client
-  opened in a request and closed at shutdown unwinds into "cancel scope in a different task".
-  Every server therefore has a worker task that holds its client for the connection's whole
-  life; calls are queued to it and run as its children, which keeps parallel calls parallel.
-- **A dead stdio server does not look dead.** When the subprocess exits, the SDK's client keeps
-  reporting healthy and every later call fails with `MCPError("Connection closed")` forever.
-  That is detected explicitly and the connection retired, so the next call starts a fresh
-  process. Without it, one crash is a dead tool until Hera restarts.
-- `~/.hera/mcp.json` is read in the Claude-Desktop shape with `${VAR}` expansion; an unset
-  variable is an error, because a blank credential fails later and somewhere else. `HERA_HOME`
-  now comes from `hera_home.home()`; `hera_tools.settings.CONFIG_FILENAME` is an alias kept so
-  nothing here has to say "MCP" twice.
+## `hera_prompts`
 
-### What `hera_profiles` settled
+One field added: `Section.escape` (default `True`, the prior behaviour). `hera_profiles` sets
+`escape=False` on slot sections and keeps `True` on regions — otherwise a slotted skill body
+reaches the model XML-escaped (`if count &lt; limit`), reading as corrupted content.
 
-- **The date is in the prompt, and it is not a tool.** A model that does not know today's date
-  answers "what is current" from its training data, confidently and a year late, and nothing on
-  screen tells that apart from an answer that is merely wrong. `hera__search`'s description
-  already said to use it "whenever the answer depends on what is true now"; the date is what
-  makes that actionable. A `what_time_is_it` tool would spend a round trip on something free and
-  would only be called by a model that already suspected it needed to. UTC always, plus the
-  person's local time when `config.toml` names a zone — an IANA name, because an offset is wrong
-  twice a year. The zone is on the **profile menu**, not in Settings: where you are is a fact
-  about you, not about how she works. An unusable name degrades to UTC in `clock.render` and is
-  refused by the route, which is deliberately opposite — a person typing into a screen should be
-  told now, a turn already running should not fail over a file edited last week.
-- **Fourteen regions, and the last two were the model's idea.** Asked to read its own prompt, it
-  reported two gaps in the same shape: nothing said what to do when it is **unsure** of an
-  answer, and nothing said what to do when it notices mid-task that it is **on the wrong track**.
-  Both are behaviours it will have anyway — every model has some default for them — and a default
-  that is nowhere in the mind is one nobody can find and nobody can change, which is the argument
-  that gave `language` its own region. They sit under `approach` rather than under `conduct`,
-  because being unsure and being wrong are part of *how she works a problem* rather than of what
-  she will and will not do; that also makes them evolvable, which is right, since the useful
-  version of "when should I ask?" is learned from conversations that went badly. `approach` became
-  a group to hold the three.
-- **`uncertainty` is half a sentence without `hera__ask`.** Telling her to ask when a question is
-  worth asking, with no mechanism to ask one, produces a model that announces its confusion and
-  then guesses anyway. The two shipped together for that reason.
-- **Twelve regions, and which twelve has moved.** `grammar` is gone: it described the
-  EMOTION/NOTE/TRACE/CALL text format that ADR 2 deleted, and shipping it would invite the model
-  to use a call syntax nothing parses. `mem_overview` folded into `memory_instr`, and `mem_ex`
-  waits for `hera_memories`. Then `emotion_vocab` left and `language` arrived: the stance list
-  became data (a slot, `SLOT_EMOTIONS`, bound per turn) because the interface needs to know that
-  *doubt* is cool, and answering in English became a region because a behaviour with no line in
-  the mind is one nobody can find and nobody can change. **`emotion_usage` and the slot have since
-  gone too** (ADR 17), which makes it thirteen; `language` is the one of that pair that was right.
-- **Two doors, not one door and a filter.** `MindRepository.write()` is the person's and opens
-  every region including `safety` — that is the actual mechanism behind "add a rule without
-  touching code". `propose()` is everything else's and raises `RegionLocked` on an owner-fixed
-  region. `hera_promptevo` will only ever call the second, so a bug in a proposer cannot become
-  a bug in her conduct.
-- **`git` the binary, not a binding.** Init, add, commit, log, show. Every invocation pins
-  `user.name`/`user.email` and sets `commit.gpgsign=false`, so a machine where git was never
-  configured is not a special case. Provenance rides in a `Hera-Origin` trailer, which
-  `git log --format` can read without parsing prose.
-- **A profile owns no text.** It disables regions, overrides individual ones, sets traits, and
-  pins skills *by name* — bare strings, because this package sits below `hera_skillsets`.
-- **`sqlalchemy.ext.mutable` does not work under SQLModel.** SQLModel's `__setattr__` calls
-  SQLAlchemy's `set_attribute` and then writes the raw value into the model's `__dict__`, so
-  the coerced `MutableDict` is overwritten the moment it is made. `ProfileRepository.save()`
-  flags the four JSON columns by name instead, and named setters cover the common edits. An
-  in-place edit followed by a bare `session.flush()` is silently lost — there is a test that
-  says so, so the trap is documented rather than hidden.
-- **Everything is synchronous**, like `hera_storage`. The turn orchestrator runs it in a
-  worker thread. An async facade over `subprocess` would be a thread pool wearing a costume.
+## Memory (`hera_memories`, [ADR 16](adr/0016-a-memory-is-a-file-and-all-of-them-are-in-the-prompt.md))
 
-### What `hera_skillsets` settled
+One markdown file per memory under `~/.hera/memories/<key>.md`, filename as key, no retrieval —
+every enabled memory is always in the prompt, under a token ceiling.
 
-- **Retrieval works with no model endpoint.** ADR 5 names keyword overlap as the fallback, and
-  it is what runs by default rather than something waiting for v0.2 — a skill that silently
-  stops arriving because embeddings are down looks exactly like a skill that was not relevant.
-  Terms are weighted by how few skills contain them, and a skill is scored on how much of *its
-  own* description the turn covered; scoring the turn's coverage would reward whichever
-  description was longest. An `Embedder` port improves it; an embedder that raises is treated
-  as one that is absent.
-- **The directory name is the skill's identifier**, not the frontmatter `name`. A disagreement
-  is a reported problem, not an override — two sources of truth for an identifier is how a
-  skill becomes unreachable under the name it appears with.
-- **`description: Use when: …` is invalid YAML** and PyYAML rejects the whole block over it,
-  which would silently cost the skill its description and make it unretrievable. Frontmatter
-  that fails to parse is re-read line by line and the rescue is reported, so the author is told
-  to quote the value instead of wondering why retrieval never fires.
-- **Nothing raises for bad content.** Unparseable YAML, no description, an empty body — the
-  skill still loads carrying `problems` written for a person. A directory with no `SKILL.md`
-  becomes a `BrokenSkill` in `Catalogue.broken` rather than being skipped.
-- **`missing` and `dropped` are different fields.** One is a pin whose folder is gone, the
-  other is a skill that exists and did not fit the budget. Same-looking absence, opposite fixes.
+- No listing tool, by design: every enabled memory is already in her prompt, so reading them back
+  would just spend context restating it.
+- `hera__forget` disables, never deletes — the only thing that unlinks a memory is a person on the
+  settings screen.
+- Token count is an approximation (`ceil(len(text) / 4)`), named as one — a real count needs the
+  active endpoint's own tokenizer, which the UI shouldn't depend on.
+- Lives in `hera_home` (a directory), not `hera_storage` (a table) — its allow-list was written
+  early, before the storage shape was decided.
 
-### `hera_prompts` grew one field
+## `hera_chats`
 
-`Section.escape`, defaulting to `True`, which is the behaviour it always had. The XML renderer
-escapes `&`, `<` and `>` in section text — correct for content this project authors, and wrong
-for a slot. A skill body reached the model as `if count &lt; limit &amp;&amp; ready`, so the
-model was reading a corrupted sample of the very thing the section existed to teach it.
-`hera_profiles` sets `escape=False` on every slot section and `True` on every region. The
-exposure is a slot that could appear to close its own element early, which matters far less
-here than in a browser: nothing parses this output, and the content came from a file its owner
-wrote.
+- `ChatEvent` wraps `hera_providers.Event` rather than extending it
+  ([ADR 10](adr/0010-chat-events-wrap-the-provider-union.md)) — keeps `hera_providers`'s
+  allow-list empty.
+- `TurnEnd` (the model's per-round-trip stop) never reaches the browser; the orchestrator closes
+  the turn once with `turn_closed`, whose reasons include "waiting for a person."
+- `hera__ask` closes the turn (`awaiting_answer`/`AnswerRequired`) rather than blocking it; the
+  reply resumes the same message via `TurnContext.resume` and becomes that call's `tool_result` —
+  the model's side of the loop never learns a person was involved.
+- The turn doesn't hardcode `hera__ask`'s name — it suspends on any name in
+  `ChatsSettings.asking_tools`, filled in by `apps/core` from `hera_mcp.ASK_TOOL`.
+- Identical call (tool + sorted-key arguments) capped at **2 per turn**; a 3rd returns a failed
+  result quoting the earlier ones. Twice, not once, because the turn can't know which tools are
+  idempotent — read-after-write is legitimately different each time.
+- Tool-budget exhaustion now runs one final round with tools withheld, so the model summarises
+  instead of stopping mid-lookup. Close reason stays `max_iterations`. Ceiling raised 8 → 12 now
+  that repeats are capped.
+- Calls issued alongside a `hera__ask` are dropped, not run — the question implies the rest is
+  contingent on the answer.
+- History is rebuilt from the event list every time, not from a stored column — preserves
+  `tool_call_id` pairing; a call with no result gets a message saying it never ran.
+- A call's *arguments* are replayed under every later question in history, unlike its result.
+  `build_history` truncates a replayed string argument past
+  `ChatsSettings.max_history_argument_chars` (a rule about size, not tool identity —
+  `hera_chats` may not learn which tools are hers).
+- A chat can pin skills (`chat.pinned_skills`), merged ahead of profile/project pins — most
+  specific wins.
+- `Tools` is a narrowing protocol `hera_chats` depends on — lets tests drive the loop without real
+  MCP servers.
 
-### What `hera_chats` settled
+## `apps/core`
 
-- **`ChatEvent` wraps the provider union** rather than extending it — [ADR 10](adr/0010-chat-events-wrap-the-provider-union.md).
-  Growing `hera_providers.Event` with `tool_result` would have made the model boundary carry a
-  concept from `hera_tools`, and that package's empty allow-list is what lets it stand alone.
-- **`TurnEnd` never reaches the browser.** It is the model's full stop for one round trip and a
-  turn with tools has several; the orchestrator consumes them and closes the turn once with
-  `turn_closed`, whose reason set is wider — a turn can also be waiting for a person.
-- **An `ask` closes the turn instead of blocking it.** `awaiting_permission`, events persisted,
-  and answering the card starts a new turn that *resumes the same message* through
-  `TurnContext.resume`. A turn holding an SSE response open waiting for a person dies with the
-  tab. A resumed turn does not re-route skills and does not re-stream what the client already
-  has.
-- **Two things suspend a turn now, through one mechanism.** `hera__ask` closes it with
-  `awaiting_answer` and `AnswerRequired`; replying resumes the same message and the reply becomes
-  that call's `tool_result`, so nothing on the model's side of the loop learns a person was in
-  it. `docs/tooling.md` § 4 argued for generalising the permission path rather than building a
-  second suspension beside it, and this is that — the only new machinery is a reply field.
-- **The turn does not know `hera__ask` exists.** It takes `ChatsSettings.asking_tools` and
-  suspends on a *name*; `apps/core` fills it in from `hera_mcp.ASK_TOOL`. A deployment that
-  configures nothing runs the tool like any other and the server refuses it, which is the honest
-  degradation. `hera_chats` naming a tool on her own server would be this package learning what
-  Hera is.
-- **An identical call runs at most twice a turn.** Same tool, same arguments — with the keys
-  sorted, because a model does not emit them in a stable order and two calls differing only in
-  that are one request. The third comes back as a failed result quoting what the earlier ones
-  returned and saying the words did not work. Observed failure: asked for a figure that was not
-  in the results, the model ran one search four times, spent its whole budget and was cut off.
-  Every call *succeeded*, so nothing noticed. Twice rather than once because the turn cannot know
-  which tools are idempotent: reading a file after writing it is the same call with a
-  legitimately different answer, and a third inside one turn is a loop in every case worth
-  designing for.
-- **Spending the tool budget ends with an answer.** The loop used to stop the moment the ceiling
-  was hit, so the last batch of results was never shown to the model and the turn ended on
-  whatever it had said *before* going to look. There is now one final round with the tools
-  withheld — an empty tool list is arithmetic, where telling a model in prose to stop is advice.
-  The close reason stays `max_iterations`: *stopped looking and summarised* is not *finished*.
-  The ceiling is 12, up from 8, which is affordable once the budget is not spent on repeats.
-- **The calls beside a question are dropped rather than run.** She asked and stopped; running the
-  rest would act on the assumption the question was about. History already says a call with no
-  result never ran, so the model reads it correctly on resume.
-- **Nothing raises into the caller's loop**, and there is no error module at all. A dead
-  provider, a broken stream, a runaway tool loop: each closes the turn with a reason.
-  `Turn.recorded` is correct at every moment, so a cancelled turn keeps the text that arrived.
-- **History is rebuilt from the event list, not from a column.** One assistant turn becomes
-  several wire messages — assistant-with-calls, one `tool` message per result, assistant again.
-  Flattening loses the `tool_call_id` pairing and the model ignores the result *silently*. A
-  call with no result still gets a message saying it never ran.
-- **Text is coalesced before storage.** Hundreds of `text_delta` events become one; the variant
-  is unchanged, so live view and reload still render the same thing.
-- **A chat can pin skills.** `chat.pinned_skills`, merged by the turn ahead of the profile's and
-  the project's pins — the most specific and most deliberate of the three wins the budget. The
-  column is JSON, so `ChatRepository.save()` flags it the way `Project` and `Message` already
-  do; an in-place edit followed by a bare flush is silently lost.
-- **`Tools` is a narrowing port, not an inverting one.** `hera_chats` may import `hera_tools`
-  and does; the protocol says which three methods a turn actually uses, and lets a test drive
-  the loop without MCP servers.
+- **Streaming route commits before it streams**, then `expunge_all()`s. A `Depends`-provided
+  session commits at teardown — after the last SSE byte — so without this the answer streamed
+  correctly and then vanished on reload. Only caught because API tests use file-backed SQLite;
+  in-memory's `StaticPool` shares one connection across sessions and hides the class of bug.
+- SPA fallback is custom, not `html=True` (which only serves `index.html` for a *directory*, not
+  `/chat/<uuid>`) — a 404 handler serves the index instead; the `/api` catch-all is registered
+  before the mount so an unknown endpoint still answers JSON.
+- `Policy(fallback=ASK)` + `DEFAULT_POLICY` allows `hera__*`, asks for everything else — an
+  ordinary turn makes several of her own calls, and a card per one trains people to click through
+  without reading.
+- Embeddings are deliberately unwired: `SkillRouter.select()` runs synchronously in a worker
+  thread, and threading the event loop down to an async embedder risks a subtle deadlock. The
+  keyword fallback runs instead — the cost is ranking quality, not a missing feature.
+- Artifacts are never served as `text/html` from Hera's own origin — content comes back as JSON,
+  downloads as `application/octet-stream` + `nosniff`; the browser frame uses `srcdoc`, which has
+  an opaque origin. Serving model-authored HTML from Hera's own origin would undo that sandbox in
+  one header.
 
-### What `apps/core` settled
+## Interface (web)
 
-- **The streaming route commits before it streams.** A `Depends`-provided session commits at
-  teardown, which for a `StreamingResponse` is *after the last byte* — so the recording session
-  opened at the end of the stream found no assistant row and persisted the whole turn into the
-  void. The answer streamed perfectly and was gone on reload. The route now commits and
-  `expunge_all()`s deliberately: the first so another session can see the rows, the second
-  because `commit()` expires every instance and the turn reads the profile and project from a
-  worker thread.
-- **In-memory SQLite hid it.** `Database.in_memory()` uses a `StaticPool` — one connection
-  shared by every session — so a second session sees the first's *uncommitted* rows. The API
-  tests now use a file per test, which is the only way they can tell that class of bug apart
-  from correctness. Thirteen of them fail if the commit is removed.
-- **A single-page fallback is not `html=True`.** That flag serves `index.html` for a
-  *directory*; `/chat/<uuid>` — every deep link and every reload inside a conversation — comes
-  back 404. `_Interface` catches the 404 and serves the index, and a catch-all under `/api`
-  is registered *before* the mount so an unknown endpoint still answers JSON.
-- **Her own tools are allowed by default.** `Policy(fallback=ASK)` means every tool asks,
-  including the several calls an ordinary turn makes — a confirmation card several
-  times a turn teaches a person to click through cards without reading them, which is the
-  failure that actually matters. `DEFAULT_POLICY` allows `hera__*` and asks for the rest.
-- **Embeddings are deliberately unwired.** `SkillRouter.select()` is synchronous and
-  `hera_chats` runs it in a worker thread, so reaching the event loop from there means
-  threading the loop handle down to the embedder, and getting it subtly wrong deadlocks a turn.
-  ADR 5's keyword fallback is what runs. The cost is worse ranking, not a missing feature, and
-  `Embedder` is the seam it lands on in v0.2.
+- One reducer (`turn.ts`) for both the live stream and the persisted list — tested to reduce to
+  the same output either way, which is what "the server render is authoritative" means in code.
+- The only parser in the browser is the SSE frame splitter (`EventSource` can't POST); everything
+  past that is already-discriminated JSON from the server.
+- An unknown event variant renders as a visible "unrecognised" row, never silently dropped — a
+  missing feature and a broken one must not look identical.
+- A tool call reads as a sentence ("called **Docker** fetch content"), qualified name on hover /
+  under the permission card — no table of known tools, so an unfamiliar server doesn't look broken
+  next to a familiar one.
+- Gutter marks by what happened, not by which event carried it: a thought keeps the ocellus; a
+  skill (routed or self-selected mid-task) gets a scroll; everything else gets a wrench.
+- A question is drawn once out of three events (`hera__ask` call, `answer_required`,
+  the synthesised `tool_result`) — `QuestionCard` is `PermissionCard` with a field instead of
+  buttons, settled state read from the persisted `answer_given` event.
+- Long tool result scrolls inside a fixed frame instead of pushing the answer off-screen.
+- A fenced code block is a `<figure>` with a copy button; copy reads the DOM rather than a
+  duplicated `data-` attribute.
+- No card may use the "danger" colour for a stance or a question — a question she can ask is never
+  an error (the rule outlived the removed emotion card, which is where it was learned).
+- Copy (needs an answer) and *Try again* (doesn't) were gated on the same flag — a turn that
+  failed before she said anything had no controls at all, which is the case someone is actually
+  staring at wanting to retry. Decoupled.
+- `busy` (send vs. Stop) and "a card is open" are different booleans — conflating them orphaned
+  suspended turns behind a card the person could never reach again.
+- A turn is one ordered list of blocks, not two (gutter rows, then all prose) — `reduce()` groups
+  consecutive gutter rows into one block; prose and cards interleave in event order.
+- Two `$effect` traps cost real debugging time and are worth remembering: assigning `scrollTop`
+  inside an effect that reads state its own scroll handler writes, and calling an initialiser from
+  an effect that both reads and writes the same state. One-time setup goes at component top-level.
 
-### What the interface settled
+## Settings
 
-- **One reducer, two callers.** `turn.ts` runs on the live stream and on the persisted list, so
-  "the server render is authoritative" is a property rather than an intention — there is a test
-  asserting a coalesced list and a streamed one reduce to the same thing.
-- **The only parser in the browser is the SSE transport.** `EventSource` cannot POST, so the
-  response body is split on the protocol's own frame boundary. What comes out is JSON the
-  server already discriminated; nothing parses model output.
-- **An unknown variant renders as a row saying so.** An interface that drops what it does not
-  recognise makes a missing feature and a broken one look identical.
-- **Two reactive loops cost an afternoon.** `effect_update_depth_exceeded` stops Svelte
-  rendering the page at all, with nothing on screen to say why. Both causes are worth
-  remembering: assigning `scrollTop` inside an `$effect` that also reads the `$state` its own
-  scroll handler writes, and calling an initialiser from an `$effect` when the initialiser both
-  reads and writes the same state. One-time setup goes at the top of the component; `ssr =
-  false` means it only ever runs in the browser anyway.
-- **A tool call reads as an action, not as machinery.** `$lib/tools.ts` opens the qualified name
-  up: *called **Docker** fetch content*, with `docker__fetch_content` on hover and under the
-  permission card, because that is what a rule is written against. The server is set in the
-  sentence rather than boxed — five chips down a gutter read as a form, the same five words in
-  bold read as a list of things she did. The one liberty taken with somebody else's word is
-  raising its first letter, because a lowercase proper noun mid-sentence reads as a typo.
-  Otherwise it is a string transformation with **no table of known tools**: one would make an
-  unfamiliar server look broken next to a familiar one.
-- **Three marks in the gutter, split by what happened rather than by which event carried it.** A
-  thought keeps the ocellus. A skill gets a **scroll** — whether the router selected it before
-  the turn or she reached for it with `hera__skill` mid-task, because those are the same thing to
-  a reader and letting the plumbing decide the picture is how a category stops looking like one.
-  Everything else she reached for gets a **wrench**. Knowing those two names is not recognising
-  tools in general: `hera__*` is her namespace and the interface already draws one of them as a
-  card. Each mark sits on the ground colour and **breaks the hairline** rather than having it
-  drawn through — an eye with a wire through it is not an eye.
-- **A long tool result scrolls inside its row.** A skill body is a document arriving in a gutter
-  row; it now sits in a fixed frame with a line count under it, instead of pushing her answer
-  off the screen. A `text` block is no longer listed under the text it already showed.
-- **A fenced code block has a copy button.** Rendered as a `figure` with a caption bar — the
-  language on the left, *Copy* on the right — and the click is caught once on the container by
-  an action, because Svelte cannot bind a handler to markup it did not render. What it copies is
-  read off the DOM rather than carried in a `data-` attribute: an attribute would be a second
-  copy of every program she writes and a second thing to escape correctly.
-- **No stance she can hold is an error**, and the *rule* outlived the feature. The emotion card
-  was drawing *warm* in pomegranate, which beside `--danger` in a dark interface reads as an alarm
-  — so *agree* looked like something had gone wrong. The card is gone with ADR 17; the constraint
-  moved to `QuestionCard`, where nothing may be the danger colour either, because no question she
-  can ask is an error.
-- ~~**The vocabulary is one list, editable.**~~ Settings → Emotions wrote `~/.hera/emotions.json`;
-  the same list rendered into the prompt per turn and picked the colour the card was drawn in. All
-  removed by ADR 17. Two things in it are worth keeping: **a setting you can edit on screen has to
-  apply on the next turn rather than the next restart**, which is why it was a prompt slot and not
-  a tool description; and **reset by deleting the file**, so "reset" and "never touched" are the
-  same state and a later change to a shipped default still reaches you. Both apply to the next
-  editable list this project grows.
-- **Skills can be started from the interface.** *Add a skill* writes the same `SKILL.md` a person
-  would write by hand. The writing is in `apps/core`, not `hera_skillsets`: that package reads
-  the skills directory and says it does not write to it, and a library that both discovers
-  content and creates it ends up owning a format it was only meant to read. The row now reads
-  author first, licence as a quiet chip after it, and the version on the right where a column of
-  them can be compared with what a repository says is current.
-- **An answer you did not want has three ways out.** Copy, edit the question, try again — a
-  quiet row under each message that appears on hover or focus. Edit and try again are one
-  request (`POST /chats/{id}/messages/{message_id}/redo`) because they are one idea: the
-  conversation goes forward from this point differently. Pointed at an answer, the question
-  above it is what gets replayed.
-- **A redo deletes what came after, rather than flagging it.** `MessageRepository.truncate_from`
-  removes the question and everything below it before the new turn starts. A chat *is* its
-  message list — history is rebuilt from it — so a `superseded` column would mean every reader
-  has to remember to filter, and the one that forgets shows the model a conversation nobody
-  had. The browser drops the same messages optimistically, so the screen is never still
-  showing an answer to a question that no longer exists.
-- **A chat is a thing you can rename and throw away.** The rail's `⋯` opens rename — an input
-  where the title was, not a prompt box — and delete behind a confirmation. `PATCH /chats/{id}`
-  is the whole backend of it. A title typed by hand sticks, because `ChatRepository.touch()`
-  only ever names a chat that has none; clearing it hands naming back to her.
-- **The composer says what she is running on and what is switched on.** The model selector sits
-  beside send and activates a registered endpoint without a restart, and a pill beside `＋`
-  counts pinned skills and connected servers with the names in its tooltip. Retrieval's picks
-  are deliberately not counted: this says what is *always* on, and a number that changed with
-  every message would be noise. The Enter hint moved to the top right of the field and fades as
-  soon as there is something to send.
-- **A person can say which skills apply.** ADR 5 keeps the *model* out of that decision; this is
-  the other half of the sentence. The composer's context pill opens a picker, and what it toggles
-  is `chat.pinned_skills` — a new JSON column, migration `0003`. The turn merges chat pins ahead
-  of the profile's and the project's, because the chat is the most specific and the most recent
-  thing anybody said about this conversation. It is not a filter: retrieval still runs and can
-  still add more. A pin whose folder is gone is *not* refused on the way in — the router already
-  reports it as `missing`, and refusing here would mean a skill moved aside for an afternoon
-  silently loses every pin that named it.
-- **A skill row answers who wrote it.** `author`, `license`, `icon` and `version` come from
-  frontmatter `hera_skillsets` still refuses to interpret, lifted into named fields in the API
-  where the audience is a screen. The verified mark comes from `~/.hera/trusted.json` — skill
-  id to SHA-256 — and has three states, because a skill you signed and somebody then edited is
-  not the same thing as one you never signed. Nothing is verified by default and that is not a
-  complaint; the signed registry it is a seam for does not exist yet.
-- **Her prose is typeset, not dumped** — [ADR 11](adr/0011-markdown-and-tex-in-the-browser.md).
-  `$lib/markdown.ts` renders Markdown and TeX and sanitises the result; `$lib/components/Prose`
-  draws it, and `app.css` styles it, because `{@html}` output is out of reach of Svelte's
-  scoped styles. Setext headings are disabled so `---` is always a rule rather than a promotion
-  of the line above it, and `$…$` is refused around anything that looks like a price. The rule
-  that has not moved is the one about structure: what she *did* is an event variant, never
-  something read back out of prose. Her **thinking** goes through the same renderer, a step
-  smaller and muted — it is written in the same notation her answers are.
-- **The reading column is the measure.** `--column` is 68ch of the body face at 17px, measured
-  in a browser with the webfont loaded — Georgia, the fallback, is a sixth wider, so the number
-  is 612px and not the 710px you get from measuring too early. Before this the column was
-  760px and only the prose was capped, so her answer stopped 100px short of the edge the user
-  bubble, the cards and the composer all reached, and the whole message read as nudged
-  off-centre.
-- **A section waiting on a request keeps its heading.** The profile card's *About* block was
-  hidden until `health` came back, so the menu grew under the pointer and an end-to-end test
-  failed roughly one run in six — the click was sometimes faster than the round trip. The
-  heading renders immediately with a line saying it is asking. Worth the note because the
-  symptom was a flaky test and the cause was an interface that changed shape after opening.
-- ~~**An emotion is drawn once.**~~ Removed with the tool (ADR 17). Its `tool_call_ready`
-  rendered as a card inline, and the matching `tool_result` had to be suppressed or the gutter drew
-  the same thing twice. **The shape survives in the question card**, which is drawn once out of
-  three events for the same reason — and that one keeps the rule the emotion card taught it.
-- **Every popup is one frame** (v0.2 M1). `Select.svelte` owns every dropdown: the composer's pill
-  as the trigger, the skill picker's panel as the list. The composer's two used to be a native
-  `<select>` with `appearance: none`, which gave the frame back and left the *list* the platform's;
-  everything else was bare native. The rail's `⋯` menus share the frame. Popups are anchored
-  popovers with no scrim — the skill picker is a sheet because choosing skills is a task you go and
-  do, and picking one value from four is not.
-- **A turn is one list, in event order.** It used to be two — every gutter row, then all the
-  prose — which reads correctly only for a turn that does its thinking up front. The moment she
-  speaks, thinks again and speaks again, the second thought was drawn *above* the sentence that
-  prompted it, and the turn could not be read downwards at all. `reduce` returns `blocks`: a run
-  of consecutive gutter rows is one bordered block, and prose and cards sit between the runs.
-  `activity` and `inline` survive as views over it rather than as two lists that had to stay in
-  step. Prose no longer accumulates across a tool call, which was the same bug from the other
-  side — text before and after a call merged, so the call was drawn below both halves of what it
-  produced.
-- **A question is drawn once too, out of three events.** The `hera__ask` call, the
-  `answer_required` card and the synthesised `tool_result` are all about the same question, and
-  only the card is a thing a person is meant to read. `QuestionCard` is `PermissionCard` with a
-  field instead of buttons — same inline placement, same settled state read from a persisted
-  event (`answer_given`) rather than inferred from what turned up afterwards.
-- **`busy` and `blocked` are different questions, and conflating them was a bug.** Both this file
-  and `docs/tooling.md` claimed the composer "already blocks while `awaiting` is non-empty".
-  Nothing read that field. Sending past an open card writes a fresh assistant row, and the resume
-  routes work from `latest_assistant` — so the suspended turn was orphaned and its card could
-  never be answered. The composer is now closed while a card is open, and the card's own controls
-  stay live, which is why the two cannot be one flag. `busy` still only decides send-versus-Stop:
-  a suspended turn is not a running one, and offering **Stop** for something that already stopped
-  is a lie about what is happening.
+- Endpoints are registered in `config.toml`, editable on screen, applied without restart —
+  `Services.use_provider()` swaps the client and the model name together, because pointing a new
+  server at the old model's name just 404s.
+- `config.toml` seeds from environment variables once, then wins — but `TUNING_FIELDS` are omitted
+  on write unless they differ from the default, so a later default improvement isn't permanently
+  shadowed by a value nobody actually chose. (This bit a real install: `timeout_s = 180.0` frozen
+  from whichever version first wrote the file.)
+- Read timeout: 3 min → **10 min** default, editable. It bounds *silence between stream chunks*,
+  not total answer time — a local 35B model prefilling a long history plus a skill body can exceed
+  3 minutes before the first token.
+- API key is write-only — responses carry `api_key_set`, never the key. Omit on PATCH to keep,
+  send empty string to clear.
+- A probe failure ("nothing listening on that port") renders as a normal answer, not a 500 — the
+  commonest fresh-install state, shown beside the models the endpoint *did* report.
+- Attachments are a content field, not inlined text — `ChatMessage.content` is a string or a list
+  of `TextPart | ImagePart`. Limits: 2 MB/text file, 12 MB/image, PNG/JPEG/WebP/GIF. A text-only
+  endpoint gets an honest error rather than a silently dropped image.
 
-### What the settings rework settled
-
-- **Endpoints are registered in `config.toml`, not in the environment.** There was no way to
-  point her at a model without an environment variable and a restart, which made "try the
-  current state" a research project. Several may be registered and one is active; ADR 2 fixes
-  the model *family* the prompt is written for and says nothing about how many endpoints you
-  may save. The file seeds itself from `HERA_PROVIDER_*` the first time it is written, and wins
-  afterwards — a setting you can change on screen that quietly does not apply is worse than one
-  that overrides a variable.
-- **A change takes effect without a restart.** `Services.use_provider()` swaps the client and
-  the model name together, because they are one decision: pointing a new server at the old
-  model's name fails as an unhelpful 404 from somebody else's API. Ownership of the provider is
-  opt-in, so a test's `FakeProvider` is never closed by a reconfiguration.
-- **The API key is write-only.** Responses carry `api_key_set`, never the key. A masked string
-  is something a person tries to edit and a client tries to send back, and both end with a key
-  of asterisks saved to disk. An omitted key on a PATCH keeps what is stored; an empty one
-  clears it.
-- **Probing is a normal answer, not a 500.** "Nothing is listening on that port" is the
-  commonest thing to be wrong on a fresh install, and it belongs on the screen you were already
-  looking at — next to the list of models the endpoint *did* report, each with a button that
-  fills the field.
-- **One version, declared once and read back.** `apps/core/pyproject.toml` is where it is
-  written; `hera_core.__version__` asks `importlib.metadata` for the installed distribution
-  rather than repeating the number, `/health` reports it, and the interface holds it on
-  `workspace.version` so a second place that shows it costs a field rather than a request. It is
-  on the start screen, centred at the foot. `release.yml` now checks the application tag against
-  that file the way it always checked a package tag, so `v1.2.3` cannot ship an About box saying
-  something else.
-- **New chat goes to the start screen.** It used to create a chat and navigate into it, which
-  opened every conversation as an empty transcript — the one screen in the application with
-  nothing on it — and left an empty row in the rail if you walked away. The start screen is
-  already where beginning a conversation is designed to happen. A project's own **＋** carries
-  the project through the store, the same way the first message does.
-- **Two doors, two questions.** Settings is *how she works* — Models, Skills, Servers,
-  Permissions, Mind, and Dreaming listed as coming (v0.3). The profile card at the bottom of the rail is
-  *you and this machine* — appearance, which of her answers, where your data is. Mixing them is
-  how a person scrolls past six model fields to find a light-mode toggle.
-- **Attachments are a field, not text.** The `＋` on the composer bar reads a file in the
-  browser and sends it as data; the model gets it composed by `hera_chats.history.content_of`,
-  and the interface draws a chip from a name, a size and a media type. Inlined, drawing that chip
-  would mean hunting for a fence and a filename in the prose — a parser, and the one rule this
-  project will not bend. `title_from` now takes only the opening paragraph, so a file under a
-  question does not end up in the sidebar.
-- **A picture is a content part.** `ChatMessage.content` is a string *or* a list of
-  `TextPart | ImagePart`, and `content_of` is the only place that decides which. A message with
-  no picture in it stays a bare string on the wire, because that is the shape every local server
-  has been serving since before parts existed and being unremarkable is worth more than being
-  uniform. Limits: 2 MB a text file, 12 MB a picture, PNG/JPEG/WebP/GIF. Whether the endpoint
-  behind the active model can *see* is the endpoint's business — a text-only server answers with
-  an error, and that error is the honest one.
-
-### The guards
+## The guards
 
 Rules that would otherwise rot are tests, not prose:
 
 | Test | Fails when |
 |---|---|
 | `test_layering.py` | a package imports sideways or upwards, or reaches into `apps/`. Each package has an explicit allow-list; `hera_storage` and `hera_prompts` have an empty one |
-| `test_workspace.py` | a member is missing from mypy's `files`, from coverage's `source`, or from the root `[tool.uv.sources]`; or two test modules would shadow each other. `conftest.py` is exempt because pytest loads it by path — mypy does not, which is why `[tool.mypy] exclude` drops it |
+| `test_workspace.py` | a member is missing from mypy's `files`, from coverage's `source`, or from the root `[tool.uv.sources]`; or two test modules would shadow each other |
 | `test_docs.py` | a decision record is unindexed, misnumbered, or has no status |
 
-### CI
+## CI
 
-`lint` (ruff + every pre-commit hook) · `types` (mypy --strict) · `test` (3.12 and 3.13, 90 %
-coverage gate) · `web` (prettier, eslint, svelte-check, vitest, build) · `e2e` (Playwright
-against the real application) · `analyze` (CodeQL, `python` and `actions`). The `web` and `e2e`
-guards now find what they were waiting for, so both do real work.
+`lint` (ruff + every pre-commit hook) · `types` (mypy --strict) · `test` (3.12 and 3.13, 90%
+coverage gate) · `web` (prettier, eslint, svelte-check, vitest, build) · `e2e` (Playwright against
+the real application) · `analyze` (CodeQL, `python` and `actions`).
 
 **Known open:** CodeQL's `actions` queries report `actions/missing-workflow-permissions` five
-times against `ci.yml`, which declares no `permissions:` block and so runs every job with the
-default `GITHUB_TOKEN` scope. `release.yml` and `codeql.yml` both declare one. Medium severity,
-below the ruleset threshold, so it blocks nothing — the fix is `permissions: contents: read` at
-the top of `ci.yml`.
+times against `ci.yml`, which declares no `permissions:` block and runs every job with the
+default `GITHUB_TOKEN` scope. Medium severity, below the ruleset threshold — fix is
+`permissions: contents: read` at the top of `ci.yml`.
 
-### Merging into `main`
+## Merging into `main`
 
-`main` is guarded by the **`protect-main` ruleset**, not classic branch protection — the classic
-API answers *"Branch not protected"*, which is misleading. Read it with
-`gh api repos/VoidEUW/hera/rulesets`. It requires linear history, squash merge only, resolved
-review threads, and a **CodeQL result**. `require_code_owner_review` is off, because the sole
-`CODEOWNERS` entry is the only maintainer and nobody can approve their own pull request — ADR 8
-already describes the intent as zero required approvals.
+`main` is guarded by the **`protect-main` ruleset**, not classic branch protection (the classic
+API answers *"Branch not protected"*, which is misleading — read it with
+`gh api repos/VoidEUW/hera/rulesets`). Requires linear history, squash merge only, resolved review
+threads, and a CodeQL result. `require_code_owner_review` is off: the sole `CODEOWNERS` entry is
+the only maintainer, so nobody could approve their own pull request — ADR 8 already specifies zero
+required approvals.
 
-Three consequences, each of which has already cost a blocked merge:
-
-- **`.github/workflows/codeql.yml` has to keep existing.** The ruleset waits for a CodeQL
-  result; with no workflow nothing produces one, and every pull request blocks indefinitely on
-  *"Waiting for Code Scanning results"*. Advanced setup rather than GitHub's default setup, so
-  the configuration is reviewable in a pull request instead of living only in settings.
-- **Leave the CodeQL query suite at the default.** `security-and-quality` was tried; every
-  finding it added was a false positive — `assert` after `raise` inside `with pytest.raises(...)`
-  read as unreachable, SQLAlchemy's `@declared_attr.directive def __table_args__(cls)` read as
-  needing `self`, an import kept for its side effect read as unused. ruff and mypy already hold
-  that bar and understand the idioms. Because unresolved review threads block the merge, a noisy
-  query is not merely noise here — it is a stop.
-- **`mergeStateStatus: CLEAN` means no conflicts, not a correct diff.** After a squash merge, a
-  branch built on the pre-squash tip still reports clean while proposing to *undo* whatever
-  exists only in the squash. Check `git diff --name-status origin/main HEAD` for deletions
-  before merging, and rebase with `git rebase --onto origin/main <old-base>` so only your own
-  commits replay.
-
-`gh pr merge --squash --match-head-commit <sha>` is what to use, and it worked for the whole
-v0.2 M1 stack. `--match-head-commit` is the point rather than a flourish: it pins the merge to
-the head you actually ran the checks against, so a push landing between the check and the merge
-stops it instead of shipping something unverified.
-
-Two things that cost time and are not obvious:
-
-- **Retarget the branch above by hand.** Merging the base of a stacked pull request does not
-  retarget the one on top of it; the PR keeps pointing at a branch that no longer moves. Set it
-  with `gh pr edit <n> --base main` after each merge.
-- **A force-push does not always fire `synchronize`.** Twice here the rebased head landed and no
-  workflow ran, so the pull request sat with *no checks reported* and could never satisfy the
-  ruleset. Closing and reopening the pull request triggers the run.
+- `.github/workflows/codeql.yml` must keep existing — the ruleset waits for a CodeQL result, and
+  with no workflow nothing produces one, so every pull request blocks indefinitely.
+- Leave the CodeQL query suite at the default. `security-and-quality` was tried; every finding it
+  added was a false positive against this codebase's idioms (ruff and mypy already hold that bar),
+  and because unresolved threads block the merge, a noisy query isn't just noise here.
+- `mergeStateStatus: CLEAN` means no conflicts, not a correct diff — after a squash merge, a
+  branch still based on the pre-squash tip reports clean while proposing to *undo* what exists
+  only in the squash. Check `git diff --name-status origin/main HEAD` for deletions before
+  merging; rebase with `git rebase --onto origin/main <old-base>`.
+- Merge with `gh pr merge --squash --match-head-commit <sha>` — pins the merge to the commit the
+  checks actually ran against.
+- Retarget the branch above a stacked PR by hand after each merge:
+  `gh pr edit <n> --base main`. Merging the base does not do this automatically.
+- A force-push doesn't always fire `synchronize` — a pull request can sit with no checks reported
+  and never satisfy the ruleset; closing and reopening it triggers the run.
 
 ## Releases and deployment
 
-**Tags are the moving point.** Nothing ships off a branch; a tag produces a release, and a
-release is what gets deployed.
+**Tags are the moving point.** Nothing ships off a branch; a tag produces a release, and a release
+is what gets deployed.
 
 | Tag | Releases |
 |---|---|
 | `v1.2.3` | the application |
 | `hera-skillsets-v0.1.0` | one package, wheel attached |
 
-`release.yml` rejects a package tag whose version disagrees with that package's
-`pyproject.toml`.
+`release.yml` rejects a package tag whose version disagrees with that package's `pyproject.toml`.
 
 ## Reuse from another project
 
-A monorepo normally costs this; here it does not. Another project — `hera-code`, say — depends
-on one package by naming its subdirectory:
+A monorepo normally costs this; here it does not. Another project — `hera-code`, say — depends on
+one package by naming its subdirectory:
 
 ```toml
 [project]
@@ -940,69 +401,39 @@ dependencies = ["hera-skillsets"]
 hera-skillsets = { git = "https://github.com/VoidEUW/hera", subdirectory = "packages/hera_skillsets", tag = "hera-skillsets-v0.1.0" }
 ```
 
-uv resolves that package's own `hera_*` dependencies from the **same commit and subdirectory**,
-so the consumer declares one line and gets a consistent set. The prerequisite is in this
-repository: every member another member depends on needs `{ workspace = true }` in the root
-`[tool.uv.sources]`, which `test_workspace.py` enforces.
+uv resolves that package's own `hera_*` dependencies from the same commit and subdirectory, so the
+consumer declares one line and gets a consistent set. Prerequisite: every member another member
+depends on needs `{ workspace = true }` in the root `[tool.uv.sources]`, which `test_workspace.py`
+enforces.
 
 Skills are not Python packages — a `SKILL.md` directory is content, synced into `~/.hera/skills/`
 or pointed at directly by Claude Code. They live in the separate `hera-skills` repository.
 
 ## What comes next
 
-**v0.1 is spine-complete.** ~~`hera_tools`~~ → ~~`hera_mcp`~~ → ~~`hera_profiles`~~ → ~~`hera_skillsets`~~ →
-~~`hera_chats`~~ → ~~`apps/core`~~ → ~~the end-to-end suite~~. Every package exists and the
-whole path runs.
-
-**Now the deepening pass**, which is what the thin-spine strategy was for. In rough order:
-
-1. **React to the build.** `docs/frontend.md` says the design language gets adjusted once there
-   is something to argue with. There is now: run `uv run hera serve` and argue with it. Open
-   questions it can now answer — the display face, whether the ocellus lands, where thinking
-   lives, the exact palette.
-2. **Her identity.** The twelve mind regions ship with placeholder text that says what belongs
-   in each. Writing them is what makes her Hera, and it is a text editor in Settings → Mind,
-   not code.
+1. **React to the build.** `docs/frontend.md` says the design language gets adjusted once there is
+   something to argue with — run `uv run hera serve` and argue with it. Open questions it can now
+   answer: the display face, whether the ocellus lands, where thinking lives, the exact palette.
+2. **Her identity.** The 13 mind regions ship with placeholder text saying what belongs in each.
+   Writing them is what makes her Hera — a text editor in Settings → Mind, not code.
 3. **A real endpoint.** Everything so far runs against `FakeProvider`. Settings → Models now
-   registers one, tests it, and lists what it reports — so this is a matter of picking the right
-   name and finding out what Qwen3.6-35B actually does with the prompt: the `xml` layout, the
-   tool catalogue.
-4. **The gaps left on purpose.** The command palette behind `⌘K` (it opens Settings for now),
-   the mobile sheet, and the embedder seam. ~~Project instructions in the interface~~ landed with
-   v0.2's M1 — the rail makes and renames projects, and `/project/<id>` edits one.
-5. **The rest of the tool surface.** `hera__search` now exists — see below — but `fetch` does
-   not, so she can find a page and not read it. The per-chat scratchpad, the question she can put
-   to you and artifacts have all landed since that list was written; what is left in
-   [tooling.md](tooling.md) is `fetch`, PDFs and the eventual split into `hera_code_mcp` and
-   `hera_sandbox`, and each section says whether it became a decision or is still a note.
+   registers one, tests it, and lists what it reports — so this is a matter of finding out what
+   Qwen3.6-35B actually does with the `xml` prompt layout and the tool catalogue.
+4. **Deliberate gaps.** The `⌘K` palette (opens Settings for now), the mobile sheet, the embedder
+   seam.
+5. **Remaining tool surface.** `fetch` is still missing (she can find a page and not read it);
+   PDFs are scoped for v0.1.0 but where extraction happens is open (see
+   [tooling.md](tooling.md) § 6); the eventual split into `hera_code_mcp` and `hera_sandbox` is
+   still a note, not a decision.
 
-**PDFs are in v0.1.0.** Reading them is scoped in rather than deferred — a paper, a spec and a
-scanned invoice are ordinary things to put in front of her, and the composer currently refuses
-all three. Where the extraction happens is open; see [tooling.md](tooling.md) § 6.
-
-**v0.2 — what makes her Hera.** `hera_memories`, trace compaction and the context meter. The shape
-of memory changed before the work started and [versions/v0.2.0.md](versions/v0.2.0.md) § M4 is
-authoritative: markdown files a person can take elsewhere, injected whole under a visible token
-budget, rather than rows ranked by cosine. `hera_promptevo` (dreaming and experience training) is
-**v0.3** now, deferred on purpose.
-
-**The application is one package now.** `hera-core` at `apps/core/` holds the API and, under
-`web/`, the SvelteKit interface — not two directories under `apps/`. See
-[ADR 9](adr/0009-one-application-package.md), which supersedes the layout clause of ADR 1 and
-ADR 6 and leaves everything else in both standing. It stays out of `packages/` on purpose: that
-directory means *a library another project can consume*, and `tests/test_layering.py` scans it
-and demands an allow-list per member. The application is the one thing that legitimately imports
-everything.
-
-**v0.3 — reach**, now planned in [versions/v0.3.0.md](versions/v0.3.0.md): dreaming and experience
-training, a sandbox, scheduled dreaming, agent personas branching the mind repository — and
-**`hera-code`**, which is what *a coding agent profile* on this list turned into. Not a profile but
-a second application: a CLI on this workspace's packages, carrying its own built-in MCP server, that
-Hera drives as an ordinary entry in `mcp.json`. The direction of *Hera as an MCP server so Claude
-Code can read her memory* reverses — she is the one reaching out.
+**v0.3.0** ([versions/v0.3.0.md](versions/v0.3.0.md)): dreaming and experience training, a
+sandbox, scheduled dreaming, agent personas branching the mind repository, and **`hera-code`** — a
+coding CLI on this workspace's packages, with its own built-in MCP server, that Hera reaches as an
+ordinary `mcp.json` entry. The direction reverses: instead of Hera as an MCP server Claude Code
+reads, she is the one reaching out.
 
 ## Working on this
 
-`CLAUDE.md` is the map, `ARCHITECTURE.md` the layering, `CONTRIBUTING.md` the setup and the
+`CLAUDE.md` is the map, `ARCHITECTURE.md` the layering, `CONTRIBUTING.md` the setup and the check
 loop. `uv sync --all-packages`, then `uv run pre-commit install` — the hooks run ruff, mypy and
 the conventional-commit check, and CI runs the same hooks so the configuration cannot drift.

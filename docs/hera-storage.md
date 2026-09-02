@@ -1,46 +1,63 @@
-# Auftrag: Bibliothek `hera_storage` bauen
+# Brief: build the `hera_storage` library
 
-Du baust eine eigenständige Python-Bibliothek in einem leeren Repository. Sie ist das Fundament eines größeren Systems (`hera`), aber sie darf davon **nichts** wissen.
+You are building a standalone Python library in an empty repository. It is the foundation of a
+larger system (`hera`), but it must know **nothing** about it.
 
-## Kontext
+## Context
 
-`hera` ist ein persönliches Agentic-Framework, aufgeteilt in mehrere unabhängige Python-Pakete mit je eigenem Repo:
+`hera` is a personal agentic framework, split into several independent Python packages, each with
+its own repo:
 
 ```
-heraAPI (FastAPI-Anwendung, verdrahtet alles)
+heraAPI (FastAPI application, wires everything together)
   hera_profiles       hera_promptevo
   hera_tools          hera_memories       hera_skillsets
   hera_prompts        hera_providers      hera_permissions     hera_chats
-                              hera_storage          <-- dieses Repo
+                              hera_storage          <-- this repo
 ```
 
-Abhängigkeiten zeigen ausschließlich nach unten. `hera_storage` steht ganz unten und importiert **keine** andere `hera_*`-Bibliothek — jetzt nicht und nie.
+Dependencies point downwards only. `hera_storage` sits at the very bottom and imports **no**
+other `hera_*` library — not now, not ever.
 
-Die Domänen-Bibliotheken darüber (`hera_chats`, `hera_memories`, `hera_promptevo`, `hera_profiles`) definieren jeweils ihre **eigenen** SQLModel-Tabellen und erben dafür von den Basisklassen aus `hera_storage`. Sie kennen einander nicht; Querverweise zwischen Bibliotheken existieren nur als lose `UUID`-Felder ohne ForeignKey-Constraint. Verknüpfende Tabellen leben in `heraAPI`.
+The domain libraries above it (`hera_chats`, `hera_memories`, `hera_promptevo`, `hera_profiles`)
+each define their **own** SQLModel tables and inherit from the base classes in `hera_storage` to
+do so. They don't know about each other; cross-references between libraries exist only as bare
+`UUID` fields with no foreign-key constraint. Linking tables live in `heraAPI`.
 
-## Die eine harte Regel
+## The one hard rule
 
-**`hera_storage` enthält keine einzige Tabelle und kein einziges Domänenkonzept.** Kein Chat, keine Message, kein Prompt, kein Provider, kein Memory. Wenn du beim Schreiben das Wort "Chat" tippst, ist etwas falsch. Die Bibliothek muss unverändert in einem völlig anderen Projekt (z. B. einer Rezeptverwaltung) einsetzbar sein.
+**`hera_storage` contains not a single table and not a single domain concept.** No chat, no
+message, no prompt, no provider, no memory. If you find yourself typing the word "chat" while
+writing this, something is wrong. The library must be usable unchanged in a completely unrelated
+project (a recipe manager, say).
 
-Zweite Regel: keine `table=True`-Klasse in dieser Bibliothek. Alle Basisklassen sind Mixins ohne eigene Tabelle.
+Second rule: no `table=True` class in this library. All base classes are mixins with no table of
+their own.
 
-## Technische Vorgaben
+## Technical requirements
 
-- Python 3.12+, Typannotationen überall, `from __future__ import annotations`.
-- Abhängigkeiten: `sqlmodel`, `pydantic-settings`. Sonst nichts. **Kein Alembic** als Laufzeitabhängigkeit — Migrationen laufen in `heraAPI`; wir stellen nur die `MetaData` und die Naming-Convention bereit.
-- Build mit `uv` und `hatchling`, Paketname `hera-storage`, Importname `hera_storage`.
-- **Synchrones** SQLAlchemy, keine Async-Sessions. Begründung: Zielumgebung ist SQLite auf einem Mac Mini für einen einzelnen Nutzer; DB-Zugriffe liegen im Mikrosekundenbereich, während die eigentliche Latenz bei den LLM-Aufrufen liegt. Async würde nur Komplexität ohne Nutzen einführen. Die Session-API muss aber threadsicher benutzbar sein (Session pro Request, niemals global geteilt).
-- Primärdatenbank ist SQLite; PostgreSQL soll ohne Codeänderung funktionieren (keine SQLite-spezifischen Typen in der öffentlichen API).
+- Python 3.12+, type annotations everywhere, `from __future__ import annotations`.
+- Dependencies: `sqlmodel`, `pydantic-settings`. Nothing else. **No Alembic** as a runtime
+  dependency — migrations run in `heraAPI`; we only provide the `MetaData` and the naming
+  convention.
+- Build with `uv` and `hatchling`, package name `hera-storage`, import name `hera_storage`.
+- **Synchronous** SQLAlchemy, no async sessions. Reasoning: the target environment is SQLite on a
+  Mac Mini for a single user; DB access sits in the microsecond range, while the real latency is
+  in the LLM calls. Async would only add complexity with no payoff. The session API must still be
+  thread-safe to use (one session per request, never shared globally).
+- Primary database is SQLite; PostgreSQL should work without code changes (no SQLite-specific
+  types in the public API).
 
-## Öffentliche API
+## Public API
 
-Alles Folgende ist aus `hera_storage` direkt importierbar. Halte dich an diese Signaturen — sie sind der Vertrag, auf den fünf andere Bibliotheken bauen werden.
+Everything below is importable directly from `hera_storage`. Stick to these signatures — they are
+the contract five other libraries will build on.
 
 ### 1. Settings
 
 ```python
 class StorageSettings(BaseSettings):
-    # env-Prefix: HERA_STORAGE_
+    # env prefix: HERA_STORAGE_
     url: str = "sqlite:///hera.db"
     echo: bool = False
     sqlite_wal: bool = True
@@ -56,25 +73,27 @@ class Database:
     @classmethod
     def from_env(cls) -> Database
     @classmethod
-    def in_memory(cls) -> Database          # StaticPool, für Tests
+    def in_memory(cls) -> Database          # StaticPool, for tests
 
     @property
     def engine(self) -> Engine
     @property
-    def metadata(self) -> MetaData          # SQLModel.metadata, für Alembic in heraAPI
+    def metadata(self) -> MetaData          # SQLModel.metadata, for Alembic in heraAPI
 
     @contextmanager
-    def session(self) -> Iterator[Session]  # commit bei Erfolg, rollback bei Exception, immer close
-    def dependency(self) -> Callable[[], Iterator[Session]]   # für FastAPI Depends()
-    def create_all(self) -> None            # nur Tests/Bootstrap, nicht für Produktivmigrationen
+    def session(self) -> Iterator[Session]  # commit on success, rollback on exception, always close
+    def dependency(self) -> Callable[[], Iterator[Session]]   # for FastAPI Depends()
+    def create_all(self) -> None            # tests/bootstrap only, not for production migrations
     def dispose(self) -> None
 ```
 
-Bei SQLite-URLs setzt ein `connect`-Event-Listener zwingend:
-`PRAGMA journal_mode=WAL` (wenn `sqlite_wal`), `PRAGMA foreign_keys=ON`, `PRAGMA busy_timeout=<busy_timeout_ms>`.
-Für `in_memory()` zusätzlich `StaticPool` und `check_same_thread=False`, sonst sieht jeder Verbindungsversuch eine leere DB.
+For SQLite URLs, a `connect` event listener must always set:
+`PRAGMA journal_mode=WAL` (when `sqlite_wal`), `PRAGMA foreign_keys=ON`,
+`PRAGMA busy_timeout=<busy_timeout_ms>`.
+For `in_memory()`, also `StaticPool` and `check_same_thread=False` — otherwise every connection
+attempt sees an empty DB.
 
-### 3. Basisklassen (Mixins, kein `table=True`)
+### 3. Base classes (mixins, no `table=True`)
 
 ```python
 class EntityStatus(StrEnum):
@@ -92,16 +111,20 @@ class SoftDeletable(SQLModel):
 
 class Versioned(SQLModel):
     version: int = 1
-    supersedes_id: UUID | None = None   # zeigt auf die vorherige Version
+    supersedes_id: UUID | None = None   # points at the previous version
     origin: str | None = None           # "manual" | "dream:<uuid>" | "selection:gen7"
     is_current: bool = True
 ```
 
-`updated_at` muss auch bei reinem Attribut-Setzen ohne expliziten Aufruf aktualisiert werden — über `sa_column_kwargs={"onupdate": ...}`, nicht über manuelles Setzen im Repository.
+`updated_at` must update even on a plain attribute assignment with no explicit call — via
+`sa_column_kwargs={"onupdate": ...}`, not via manual setting in the repository.
 
-Alle drei Mixins müssen frei kombinierbar sein: `class Foo(Entity, SoftDeletable, Versioned, table=True)` muss ohne MRO- oder Feldkonflikte funktionieren. Schreib dafür einen expliziten Test.
+All three mixins must be freely combinable: `class Foo(Entity, SoftDeletable, Versioned,
+table=True)` must work with no MRO or field conflicts. Write an explicit test for that.
 
-Exportiere außerdem `NAMING_CONVENTION: dict[str, str]` (Standard-SQLAlchemy-Konvention für `ix`/`uq`/`ck`/`fk`/`pk`) und wende sie auf die MetaData an. Ohne benannte Constraints scheitert Alembics Batch-Modus unter SQLite bei jeder Spaltenänderung — das ist der Grund, warum das hier steht.
+Also export `NAMING_CONVENTION: dict[str, str]` (the standard SQLAlchemy convention for
+`ix`/`uq`/`ck`/`fk`/`pk`) and apply it to the metadata. Without named constraints, Alembic's batch
+mode fails under SQLite on every column change — that's the reason this exists.
 
 ### 4. Repository
 
@@ -118,18 +141,21 @@ class Repository(Generic[T]):
     def add(self, obj: T) -> T
     def add_all(self, objs: Iterable[T]) -> list[T]
     def save(self, obj: T) -> T
-    def revoke(self, id: UUID) -> T        # setzt status + revoked_at
+    def revoke(self, id: UUID) -> T        # sets status + revoked_at
     def restore(self, id: UUID) -> T
     def hard_delete(self, id: UUID) -> None
     def count(self, *where: Any, include_revoked: bool = False) -> int
     def exists(self, id: UUID) -> bool
 ```
 
-Wichtig: `include_revoked=False` filtert nur, wenn das Modell tatsächlich von `SoftDeletable` erbt — sonst wird der Parameter ignoriert statt einen Fehler zu werfen. `revoke`/`restore` werfen `TypeError`, wenn das Modell nicht soft-löschbar ist.
+Important: `include_revoked=False` only filters when the model actually inherits from
+`SoftDeletable` — otherwise the parameter is ignored rather than raising. `revoke`/`restore` raise
+`TypeError` when the model isn't soft-deletable.
 
-`Repository` ist als Basisklasse zum Ableiten gedacht: Domänen-Bibliotheken schreiben `class ChatRepository(Repository[Chat])` und ergänzen fachliche Methoden. Dokumentiere das im README mit einem Beispiel.
+`Repository` is meant to be subclassed: domain libraries write `class ChatRepository(Repository
+[Chat])` and add domain-specific methods. Document that in the README with an example.
 
-### 5. Versionierung
+### 5. Versioning
 
 ```python
 def new_version(session: Session, obj: V, *, origin: str, **changes: Any) -> V
@@ -137,51 +163,73 @@ def version_history(session: Session, model: type[V], id: UUID) -> list[V]
 def current_version(session: Session, model: type[V], id: UUID) -> V | None
 ```
 
-`new_version` kopiert das Objekt, übernimmt `**changes`, setzt `version += 1`, `supersedes_id = obj.id`, `origin`, vergibt eine neue `id`, setzt `is_current=False` auf dem alten Objekt und `True` auf dem neuen. Es wird ein Snapshot pro Version gespeichert, kein Diff.
+`new_version` copies the object, applies `**changes`, sets `version += 1`,
+`supersedes_id = obj.id`, `origin`, assigns a new `id`, sets `is_current=False` on the old object
+and `True` on the new one. One snapshot is stored per version, not a diff.
 
-`version_history` folgt der `supersedes_id`-Kette rückwärts und gibt die Versionen chronologisch aufsteigend zurück. Es muss auch dann terminieren, wenn die Kette durch einen Fehler zyklisch wäre — bau eine Schutzgrenze ein.
+`version_history` follows the `supersedes_id` chain backwards and returns versions in ascending
+chronological order. It must still terminate if the chain were ever cyclic due to a bug — build in
+a guard limit.
 
-### 6. Fehler
+### 6. Errors
 
 ```python
 class StorageError(Exception): ...
-class NotFound(StorageError): ...       # trägt model_name und id
-class Conflict(StorageError): ...       # für IntegrityError-Wrapping
+class NotFound(StorageError): ...       # carries model_name and id
+class Conflict(StorageError): ...       # wraps IntegrityError
 ```
 
-`Database.session()` fängt `IntegrityError` und wirft `Conflict` mit der ursprünglichen Exception als `__cause__`. Andere DB-Fehler werden nicht verschluckt.
+`Database.session()` catches `IntegrityError` and raises `Conflict` with the original exception
+as `__cause__`. Other DB errors are not swallowed.
 
-### 7. Test-Unterstützung
+### 7. Test support
 
-Ein Modul `hera_storage.testing` mit pytest-Fixtures (`db`, `session`), registriert als pytest-Plugin über den `pytest11`-Entry-Point in `pyproject.toml`. Damit bekommt jede Domänen-Bibliothek `def test_x(session): ...` geschenkt, ohne Setup zu duplizieren.
+A `hera_storage.testing` module with pytest fixtures (`db`, `session`), registered as a pytest
+plugin via the `pytest11` entry point in `pyproject.toml`. That gives every domain library
+`def test_x(session): ...` for free, with no duplicated setup.
 
-## Konventionen, die du im README dokumentierst
+## Conventions to document in the README
 
-- **Tabellenpräfixe.** Jede Domänen-Bibliothek setzt `__tablename__` explizit mit eigenem Präfix (`chat_messages`, `mem_entries`, `evo_generations`). Alle Modelle landen in derselben `MetaData`, also kollidieren gleichnamige Tabellen aus zwei Bibliotheken sonst still.
-- **Keine bibliotheksübergreifenden ForeignKeys.** Verweise auf Entitäten anderer Bibliotheken sind nackte `UUID`-Felder. Integrität stellt die Anwendungsschicht her, nicht die DB.
-- **Migrationen laufen in heraAPI.** Dort werden alle Bibliotheken importiert, wodurch sich ihre Modelle registrieren; `alembic autogenerate` sieht dann das Gesamtschema. Schreib das als kurzen Abschnitt ins README, inklusive Hinweis auf `render_as_batch=True` für SQLite.
+- **Table prefixes.** Every domain library sets `__tablename__` explicitly with its own prefix
+  (`chat_messages`, `mem_entries`, `evo_generations`). All models land in the same `MetaData`, so
+  identically named tables from two libraries would otherwise collide silently.
+- **No cross-library foreign keys.** References to entities in other libraries are bare `UUID`
+  fields. Integrity is enforced by the application layer, not the DB.
+- **Migrations run in heraAPI.** That's where every library gets imported, which registers its
+  models; `alembic autogenerate` then sees the full schema. Write this as a short section in the
+  README, including a note on `render_as_batch=True` for SQLite.
 
-## Qualitätsanforderungen
+## Quality requirements
 
-- `ruff` (lint + format) und `mypy --strict` laufen ohne Befund.
-- pytest mit In-Memory-SQLite. Die Tests definieren sich ihre eigenen Dummy-Modelle (`class Widget(Entity, SoftDeletable, Versioned, table=True)`) — es gibt in dieser Bibliothek nichts Fachliches zu testen.
-- Testabdeckung mindestens 90 % auf `repository.py` und `versioning.py`.
-- Mindestens diese Fälle explizit abgedeckt: Rollback bei Exception im `session()`-Block; `include_revoked` auf einem Modell ohne `SoftDeletable`; `revoke` auf einem Modell ohne `SoftDeletable` wirft; kombinierte Mixin-Vererbung; `new_version` über drei Generationen mit korrekter Historie; `Conflict` bei Unique-Verletzung; WAL-Pragma wird auf Datei-SQLite tatsächlich gesetzt.
-- README mit: Zweck, Installation, 20-Zeilen-Quickstart, Beispiel für ein abgeleitetes Repository, Abschnitt zu Migrationen, und einem expliziten Abschnitt "Was hier **nicht** hineingehört".
+- `ruff` (lint + format) and `mypy --strict` run clean.
+- pytest with in-memory SQLite. Tests define their own dummy models
+  (`class Widget(Entity, SoftDeletable, Versioned, table=True)`) — there is nothing
+  domain-specific to test in this library.
+- Test coverage at least 90% on `repository.py` and `versioning.py`.
+- At minimum, these cases are covered explicitly: rollback on an exception inside the `session()`
+  block; `include_revoked` on a model without `SoftDeletable`; `revoke` on a model without
+  `SoftDeletable` raises; combined mixin inheritance; `new_version` across three generations with
+  correct history; `Conflict` on a unique-constraint violation; the WAL pragma is actually set on
+  file-backed SQLite.
+- README covering: purpose, installation, a 20-line quickstart, an example of a derived
+  repository, a section on migrations, and an explicit "what does **not** belong here" section.
 
-## Reihenfolge
+## Order of work
 
-1. `pyproject.toml`, Repo-Struktur (`src/hera_storage/`), Tooling-Konfiguration.
+1. `pyproject.toml`, repo structure (`src/hera_storage/`), tooling configuration.
 2. `settings.py`, `errors.py`, `base.py`.
-3. `database.py` inklusive SQLite-Pragma-Listener.
+3. `database.py`, including the SQLite pragma listener.
 4. `repository.py`.
 5. `versioning.py`.
-6. `testing.py` und Entry-Point.
+6. `testing.py` and the entry point.
 7. Tests.
 8. README.
 
-Halte nach Schritt 3 kurz an und zeig mir die Basisklassen plus `Database`, bevor du weiterbaust — daran hängt alles Weitere, und ein Fehler dort ist später teuer.
+Pause briefly after step 3 and show me the base classes plus `Database` before continuing —
+everything else depends on them, and a mistake there is expensive later.
 
-## Nicht bauen
+## Do not build
 
-Kein Caching, kein Connection-Retry, kein Event-/Outbox-System, keine Volltextsuche, keine Embeddings, kein Multi-Tenancy, keine Async-Variante, keine CLI. Wenn dir während der Arbeit ein Feature sinnvoll erscheint, das hier nicht steht: nicht einbauen, sondern am Ende als Vorschlag nennen.
+No caching, no connection retry, no event/outbox system, no full-text search, no embeddings, no
+multi-tenancy, no async variant, no CLI. If a feature seems useful while you're working on this
+and it isn't listed here: don't add it — name it as a suggestion at the end instead.
