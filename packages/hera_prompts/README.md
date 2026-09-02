@@ -241,5 +241,4 @@ content, no caching, no tokenizer, no persistence, no history management, and no
 of tools, memories, skills or chats. No provider specifics either beyond the three roles —
 mapping `Message` onto a wire format is `hera_providers`' job.
 
-The German specification this library was built against is kept verbatim as
-`docs/hera-prompts.md`.
+The specification this library was built against is kept as `docs/hera-prompts.md`.
