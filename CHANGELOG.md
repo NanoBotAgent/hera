@@ -56,6 +56,16 @@ Towards [v0.2.1](docs/versions/v0.2.1.md), the polish pass.
   `artifact_list` and the absent memory-listing tool have one: an absence nobody pinned is an
   absence somebody adds back.
 
+- **A long reasoning trace opens as its summary** ([issue #15](https://github.com/VoidEUW/hera/issues/15)).
+  The gutter collapse lived only under the phone breakpoint: above it a run of four, seven,
+  eleven rows rendered in full between the question and the reply, and past three rows a trace
+  is a wall, not a trail. Past three it now opens as the count line (*4 things she did*) plus
+  the most recent row — a summary of the latest step rather than a placeholder where the work
+  was — expanding to the whole trace on click; the phone keeps its tighter rule and collapses
+  anything past a single row the same way. The rule is CSS, not the reducer: how a trace reads
+  is a question for the reading surface, and a turn that arrived before the change renders by
+  the new rule from the same events.
+
 ## [0.2.0] — 2026-08-31
 
 **The deepening pass: what makes her accumulate.** v0.1.0 ran a turn end to end and forgot it

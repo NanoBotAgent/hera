@@ -65,12 +65,17 @@
 	let editing = $state(false);
 	let draft = $state('');
 	let copied = $state(false);
-	/** Below the phone breakpoint a gutter block of more than one row opens collapsed, behind one
-	 * summary row — CSS decides whether that matters (`.summary`/`.rows` below are only styled
-	 * apart under the shared 780px breakpoint), so above it every row still always shows and this
-	 * map is simply never consulted. Keyed by block, not global: a turn with two runs of activity
-	 * opens and closes them one at a time, the way two `ActivityRow`s already do. */
+	/** Which blocks of the gutter are currently expanded. Two rules can make a block open
+	 * collapsed behind one summary line: at any width, one that is *long* — more rows than
+	 * scan at a glance, see `LONG_TRACE` — and under the phone breakpoint, anything past a
+	 * single row. Keyed by block, not global: a turn with two runs of activity opens and
+	 * closes them one at a time, the way two `ActivityRow`s already do. */
 	let expandedGutter = $state<Record<string, boolean>>({});
+
+	/** More rows than this make a block long: it opens collapsed at every width, not just on
+	 * a phone. Three still scan — a thought, a call, another thought; four are a wall between
+	 * the question and its answer, and the answer is the message. */
+	const LONG_TRACE = 3;
 
 	const turn = $derived(reduce(events));
 	const closed = $derived(turn.closed);
@@ -214,10 +219,10 @@
 		     so the gutter reads as a group where it is one. -->
 		{#each turn.blocks as item (item.key)}
 			{#if item.kind === 'gutter'}
-				<div class="gutter">
+				<div class="gutter" class:long={item.rows.length > LONG_TRACE}>
 					{#if item.rows.length > 1}
-						<!-- Only meaningful under the phone breakpoint, where CSS below hides the
-						     full list until this is expanded. Rendered above it too, harmlessly:
+						<!-- CSS alone decides where a collapse exists to switch: a *long* block at any
+						     width, anything past one row on the phone. Untouched blocks keep this hidden —
 						     `.summary` is what CSS hides there, not a second branch of markup. -->
 						<button
 							class="summary"
@@ -235,8 +240,13 @@
 						class="rows"
 						class:collapsed={item.rows.length > 1 && !(expandedGutter[item.key] ?? false)}
 					>
-						{#each item.rows as row (row.key)}
-							<ActivityRow {row} {streaming} />
+						{#each item.rows as row, i (row.key)}
+							<!-- Each row in its own wrapper, so a collapsed block can keep the newest one on
+							     screen: `display: contents` makes the wrapper draw no box of its own, and the
+							     CSS hides every one but the latest. -->
+							<div class="entry" class:latest={i === item.rows.length - 1}>
+								<ActivityRow {row} {streaming} />
+							</div>
 						{/each}
 					</div>
 				</div>
@@ -435,32 +445,46 @@
 		margin-top: 0;
 	}
 
-	/* Above the phone breakpoint this never shows and `.rows` is never collapsed — every row
-	   always visible, as it always has been. Below it, a block of more than one row opens
-	   behind this one line instead: the same "quiet, expandable" idea `ActivityRow` already
-	   applies to a single row's own detail, one level up. */
+	/* A collapse comes in two widths. At every width, a *long* block — more rows than scan at a
+	   glance — opens behind one line instead: it is a wall between the question and the reply,
+	   and the reply is the message. On the phone anything past one row opens that way. Either
+	   way a collapsed block keeps its most recent row on screen, so the summary is the latest
+	   step she took rather than a count of steps you cannot see. The same "quiet, expandable"
+	   idea `ActivityRow` already applies to a single row's own detail, one level up. */
 	.summary {
+		display: none;
+		align-items: baseline;
+		gap: 9px;
+		width: 100%;
+		padding: 2px 0;
+		text-align: left;
+		font-size: 13.5px;
+		color: var(--text-muted);
+	}
+
+	.summary .trail {
+		margin-left: auto;
+		color: var(--text-faint);
+	}
+
+	.entry {
+		display: contents;
+	}
+
+	.gutter.long .summary {
+		display: flex;
+	}
+
+	.gutter.long .rows.collapsed > .entry:not(.latest) {
 		display: none;
 	}
 
 	@media (max-width: 780px) {
 		.summary {
 			display: flex;
-			align-items: baseline;
-			gap: 9px;
-			width: 100%;
-			padding: 2px 0;
-			text-align: left;
-			font-size: 13.5px;
-			color: var(--text-muted);
 		}
 
-		.summary .trail {
-			margin-left: auto;
-			color: var(--text-faint);
-		}
-
-		.rows.collapsed {
+		.rows.collapsed > .entry:not(.latest) {
 			display: none;
 		}
 	}
