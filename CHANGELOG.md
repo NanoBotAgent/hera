@@ -56,6 +56,11 @@ Towards [v0.2.1](docs/versions/v0.2.1.md), the polish pass.
   `artifact_list` and the absent memory-listing tool have one: an absence nobody pinned is an
   absence somebody adds back.
 
+- **A long reasoning trace opens as its summary** ([issue #15](https://github.com/VoidEUW/hera/issues/15)).
+  A gutter block past three rows opens collapsed at every width — the count line (*4 things
+  she did*) plus the most recent row — expanding to the whole trace on click; the phone's old
+  anything-past-one-row rule works the same way now.
+
 ## [0.2.0] — 2026-08-31
 
 **The deepening pass: what makes her accumulate.** v0.1.0 ran a turn end to end and forgot it

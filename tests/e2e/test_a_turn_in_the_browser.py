@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from hera_providers import TextDelta, TurnEnd, text_turn, tool_call
+from hera_providers import TextDelta, ThinkingDelta, TurnEnd, text_turn, tool_call
 
 playwright = pytest.importorskip(
     "playwright.sync_api", reason="playwright is not installed; run `uv run playwright install`"
@@ -765,3 +765,59 @@ class TestWhatSheRemembers:
         export = panel.get_by_role("link", name="Export MEMORY.md")
         assert export.count() == 1
         assert export.get_attribute("download") == "MEMORY.md"
+
+
+COLLAPSING_SCRIPT: list[Any] = [
+    # A reasoning run with no prose to break it: thought, call, thought, call — four rows in
+    # one gutter block, and four is past the point where a run still scans at a glance. That is
+    # the shape issue #15 asks after: not a row that is wrong, but a wall of them between the
+    # question and the reply.
+    [
+        ThinkingDelta(text="Checking the obvious place first."),
+        tool_call("hera__search", {"query": "the desk drawer"}, call_id="call_drawer"),
+        ThinkingDelta(text="Not there. Widening the search."),
+        tool_call("hera__search", {"query": "the coat pockets"}, call_id="call_coat"),
+        TurnEnd(reason="tool_calls"),
+    ],
+    text_turn("In the coat, as it happens — the drawer came back empty."),
+]
+"""Four rows because that is the line the component draws: three still scan — a thought, a
+call, another thought — and past that the run stops glancing back at you, so it opens as a
+summary instead."""
+
+
+class TestALongTraceCollapses:
+    """A long reasoning trace opens as a summary of its latest step, expandable to the whole.
+
+    The collapse lived only under the phone breakpoint: above it every row rendered, so a long
+    turn was a wall of rail between the question and the answer. Issue #15 asks for the desktop
+    version of the same idea — the count line and the most recent row, the rest a click away.
+    """
+
+    @pytest.fixture
+    def script(self) -> list[Any]:
+        """Overrides the fixture in ``conftest.py``, which serves the shared script."""
+        return COLLAPSING_SCRIPT
+
+    def test_a_long_trace_opens_as_a_summary_of_its_latest_step(self, page: Any) -> None:
+        composer = page.locator("textarea").first
+        composer.fill("Where did I leave my keys")
+        composer.press("Enter")
+
+        page.wait_for_url("**/chat/**", timeout=15_000)
+        page.wait_for_selector("text=In the coat", timeout=30_000)
+
+        # Four rows happened, and one of them is on the screen: the most recent one, under the
+        # count line. A summary of the trace, not a placeholder where it was.
+        assert page.locator("article.hers .row").count() == 4
+        summary = page.get_by_role("button", name="4 things she did")
+        summary.wait_for(timeout=5_000)
+        assert page.locator("article.hers .row:visible").count() == 1
+        assert page.locator("article.hers .row:visible", has_text="the coat pockets").count() == 1
+
+        # And it is a door, not a lid: the count line opens onto the whole trace and puts it
+        # away again.
+        summary.click()
+        assert page.locator("article.hers .row:visible").count() == 4
+        summary.click()
+        assert page.locator("article.hers .row:visible").count() == 1
