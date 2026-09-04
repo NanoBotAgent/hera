@@ -57,14 +57,9 @@ Towards [v0.2.1](docs/versions/v0.2.1.md), the polish pass.
   absence somebody adds back.
 
 - **A long reasoning trace opens as its summary** ([issue #15](https://github.com/VoidEUW/hera/issues/15)).
-  The gutter collapse lived only under the phone breakpoint: above it a run of four, seven,
-  eleven rows rendered in full between the question and the reply, and past three rows a trace
-  is a wall, not a trail. Past three it now opens as the count line (*4 things she did*) plus
-  the most recent row — a summary of the latest step rather than a placeholder where the work
-  was — expanding to the whole trace on click; the phone keeps its tighter rule and collapses
-  anything past a single row the same way. The rule is CSS, not the reducer: how a trace reads
-  is a question for the reading surface, and a turn that arrived before the change renders by
-  the new rule from the same events.
+  A gutter block past three rows opens collapsed at every width — the count line (*4 things
+  she did*) plus the most recent row — expanding to the whole trace on click; the phone's old
+  anything-past-one-row rule works the same way now.
 
 ## [0.2.0] — 2026-08-31
 
