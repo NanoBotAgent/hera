@@ -15,6 +15,17 @@ so the number in this file, on the tag, and in the interface cannot drift apart.
 
 Towards [v0.2.1](docs/versions/v0.2.1.md), the polish pass.
 
+### Added
+
+- **Her waiting ocellus fans its tail** ([issue #44](https://github.com/VoidEUW/hera/issues/44)).
+  Before her first word the thinking mark displays: the eye swells, eight peacock feathers throw
+  outward in every direction, hold, and spring back behind it, over a 2.4-second beat instead of
+  a bare spinner. The fan turns by one feather's spacing per beat, which makes the turn seamless.
+  When her first words land the tail is drawn back into the eye rather than cut off mid-air. It
+  is drawn at 22 px, larger than the 16 px thinking mark it replaces, because a fanned tail at
+  16 px is a smudge. The running eyes in the activity gutter keep the plain look and the slower
+  four-second cycle, and `prefers-reduced-motion` leaves the tail folded.
+
 ### Removed
 
 - **Emotion cards, and everything that fed them** —

@@ -15,13 +15,14 @@
 	 * edit itself: you can see the answer you are about to replace while you retype the
 	 * question.
 	 */
+	import { untrack } from 'svelte';
 	import type { AnswerRequired, AnyEvent, Artifact, PermissionRequired } from '$lib/api/events';
 	import { size } from '$lib/attachments';
 	import { t } from '$lib/i18n';
 	import { isAnswered, reduce, replyTo } from '$lib/turn';
 	import ActivityRow from './ActivityRow.svelte';
 	import ArtifactCard from './ArtifactCard.svelte';
-	import Ocellus from './Ocellus.svelte';
+	import Ocellus, { FOLD_MS } from './Ocellus.svelte';
 	import PermissionCard from './PermissionCard.svelte';
 	import QuestionCard from './QuestionCard.svelte';
 	import Prose from './Prose.svelte';
@@ -82,6 +83,31 @@
 	// The one piece of choreography: the ocellus appears where her answer will begin, and when
 	// the first text arrives it shrinks into the gutter as the first eye of the turn.
 	const waiting = $derived(streaming && turn.inline.length === 0 && turn.activity.length === 0);
+
+	/** The mark outlives `waiting` by exactly one fold, so the tail is drawn back into the eye
+	 * instead of being cut off mid-air the moment her first words land. `waiting` says whether
+	 * she is still without words; these two say what is on screen. */
+	let marked = $state(false);
+	let folding = $state(false);
+
+	$effect(() => {
+		if (waiting) {
+			marked = true;
+			folding = false;
+			return;
+		}
+		// Untracked: this effect writes `marked`, and reading it as a dependency would mean the
+		// write schedules the effect that did it.
+		if (!untrack(() => marked)) return;
+		folding = true;
+		const fold = setTimeout(() => {
+			marked = false;
+			folding = false;
+		}, FOLD_MS);
+		// Also the cancel path: a turn that starts again before the fold finishes drops the
+		// timer, and the branch above puts the tail straight back up.
+		return () => clearTimeout(fold);
+	});
 
 	const note = $derived.by(() => {
 		if (!closed || closed.reason === 'completed') return '';
@@ -276,8 +302,11 @@
 			{/if}
 		{/each}
 
-		{#if waiting}
-			<p class="waiting"><Ocellus size={16} alive /> <span class="sr-only">Thinking</span></p>
+		{#if marked}
+			<p class="waiting">
+				<Ocellus size={22} alive burst {folding} />
+				<span class="sr-only">Thinking</span>
+			</p>
 		{/if}
 
 		{#if note}
