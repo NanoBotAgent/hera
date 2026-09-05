@@ -25,13 +25,7 @@ from typing import Any
 import uvicorn
 from playwright.sync_api import Page, sync_playwright
 
-from hera_providers import (
-    FakeProvider,
-    ThinkingDelta,
-    TurnEnd,
-    text_turn,
-    tool_call,
-)
+from hera_providers import FakeProvider, ThinkingDelta, TurnEnd, text_turn, tool_call
 from hera_providers.events import Event
 from hera_providers.request import ChatRequest
 
