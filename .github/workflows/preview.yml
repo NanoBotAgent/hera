@@ -1,0 +1,65 @@
+name: Preview
+
+# What a change looks like, on the request itself. Builds the real interface, serves it from a
+# real server with a scripted model behind it, and walks a browser through the scenes a
+# reviewer would walk to -- start page, the waiting mark mid-breath, answers, a long trace,
+# the phone -- and attaches screenshots and a video to the run. No live endpoint, nothing
+# deployed, everything disposable.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-workspace
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/core/web/package-lock.json
+
+      - name: Build the interface
+        working-directory: apps/core/web
+        run: npm ci && npm run build
+
+      - name: Install the browser
+        run: uv run playwright install chromium --with-deps
+
+      - name: Film the walkthrough
+        run: uv run python tests/e2e/capture_preview.py preview-media
+
+      - name: Upload the media
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-media
+          path: preview-media/
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Tell the pull request where they are
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { runId } = context;
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId}#artifacts`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Screenshot-and-video walkthrough of this branch is done: ${url}`,
+            });
