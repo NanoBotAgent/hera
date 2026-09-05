@@ -274,22 +274,45 @@ pass as everything else under **Open**.
 
 ## Motion
 
-She is *ox-eyed*: wide, calm, unhurried. Nothing flickers, nothing bounces, nothing slides in
-from off-screen. There is exactly one piece of choreography, and everything else is a fade or a
-height change.
+She is *ox-eyed*: wide, calm, unhurried. Nothing flickers and nothing slides in from off-screen.
+There is exactly one piece of choreography, and everything else is a fade or a height change.
 
-**The thinking indicator** is that one piece. The ocellus appears where her answer will begin;
-while she is still without words it loops between the peacock feather and the open eye, and
-once she is speaking the iris rotates once every four seconds with the brass ring breathing
-between 60 % and 100 % opacity on the same cycle. Slow enough to read as attention rather than
-as a spinner. When the
-first `text_delta` arrives it does not disappear — it shrinks to 8 px and takes its place at the
-top of the activity gutter, where it stays as the first eye of that turn. The animation becomes
-the record.
+**The thinking indicator** is that one piece, and it has two states. While she is still without
+words the ocellus **displays**, at 22 px rather than the usual 16: over a 2.4-second beat the eye
+swells, eight feathers throw outward in every direction, hold, and fold back behind it — the one
+bounce in the interface, and it is there because a waiting mark that does not move is the thing
+[issue #44](https://github.com/VoidEUW/hera/issues/44) was opened about. The fan turns as it
+goes, by exactly one feather's spacing per beat, which is what makes the turn seamless: eight
+blades 45° apart are the same eight blades turned 45°. Once she is speaking it settles onto the
+slower four-second cycle: the iris rotates once, with the ring breathing between 60 % and 100 %
+opacity. Both are slow enough to read as attention rather than as a spinner.
+
+**The display is shorter than the settled state on purpose.** It is one gesture with a beginning
+and an end, so whatever is left after it finishes is a still circle, and the way to have less of
+that is to come round again sooner rather than to find something to fill it with. A version that
+filled it — the mark dimming and coming back up between throws — was tried and removed: a blink
+next to a gesture this smooth reads as a different animation borrowed from somewhere else. What
+covers the quiet part instead is the eye easing back up from the bounce, which runs to the end of
+the beat.
+
+**The tail comes back in rather than being cut off.** When her first words land the throw and
+the swell freeze where they stand and the fan is drawn into the eye over 460 ms, still turning
+as it comes — `Ocellus` exports `FOLD_MS` and `Message` keeps the mark mounted exactly that long
+past the end of `waiting`. Freezing rather than cancelling is the whole trick: a cancelled
+animation snaps back to its resting value, so the tail would vanish before it could be pulled in.
+It only shrinks as far as half, too, because a feather at full stretch has its tip 20.5 units out
+and the eye covers 11.5 of them — everything past that is animating something already hidden.
+
+Only the waiting mark displays. The running eyes in the activity gutter keep the plain look, and
+only the waiting one is drawn in a box twice its layout size — a fanned feather reaches past
+where the eye sits, so it bleeds over its neighbours rather than pushing the line apart. Once the
+tail is in, the mark gives way to the activity gutter, where an 8 px eye stays as the first eye of
+that turn. The animation becomes the record.
 
 Everything else: 120 ms fades, 160 ms disclosure heights, `ease-out`. `prefers-reduced-motion`
-replaces the rotation with a static ocellus at full opacity and removes every transition; the
-interface must be completely usable and completely legible with all motion off.
+replaces the rotation with a static ocellus at full opacity, leaves the tail folded, and removes
+every transition; the interface must be completely usable and completely legible with all motion
+off.
 
 ## The screen
 
