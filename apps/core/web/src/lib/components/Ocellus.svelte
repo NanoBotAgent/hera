@@ -120,6 +120,11 @@
 		animation: close-open 4s var(--ease) infinite;
 	}
 
+	/* The waiting ocellus gets the morphism alone — no competing ring breath. */
+	.alive.morph .ring {
+		animation: none;
+	}
+
 	.feather .vane {
 		fill: var(--laurel);
 	}
