@@ -76,7 +76,11 @@ class PacedProvider(FakeProvider):
     """
 
     def __init__(
-        self, script: Sequence[Any], *, hold_turns: Sequence[int] | None = None, stream_delay: float = 0.25
+        self,
+        script: Sequence[Any],
+        *,
+        hold_turns: Sequence[int] | None = None,
+        stream_delay: float = 0.25,
     ) -> None:
         super().__init__(script)
         self._holdings = None if hold_turns is None else set(hold_turns)
