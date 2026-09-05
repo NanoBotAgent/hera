@@ -38,9 +38,10 @@ from hera_providers import (
 ROOT = Path(__file__).resolve().parents[2]
 STATIC = ROOT / "apps" / "core" / "src" / "hera_core" / "static"
 
-# The waiting mark's feather-eye breath runs a four-second cycle; the first scripted answer is
-# held back long enough for the video to show it go round more than once.
-WAIT_FLOOR = 8.0
+# The waiting mark's feather-eye breath runs a four-second cycle; every scripted answer is
+# held back long enough for the video to show it go round once, and for the walkthrough's
+# look at it to never land after the mark has already gone.
+WAIT_FLOOR = 4.0
 
 SCRIPT: list[list[Event]] = [
     [
@@ -75,17 +76,17 @@ class PacedProvider(FakeProvider):
     """
 
     def __init__(
-        self, script: Sequence[Any], *, hold_turns: Sequence[int] = (0,), stream_delay: float = 0.25
+        self, script: Sequence[Any], *, hold_turns: Sequence[int] | None = None, stream_delay: float = 0.25
     ) -> None:
         super().__init__(script)
-        self._holdings = set(hold_turns)
+        self._holdings = None if hold_turns is None else set(hold_turns)
         self._stream_delay = stream_delay
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[Event]:
         turn_index = len(self.requests)
         first = True
         async for event in super().stream(request):
-            if first and turn_index in self._holdings:
+            if first and (self._holdings is None or turn_index in self._holdings):
                 await asyncio.sleep(WAIT_FLOOR)
                 first = False
             else:
