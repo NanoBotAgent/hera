@@ -22,8 +22,8 @@ from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Any
 
-import uvicorn
 from playwright.sync_api import Page, sync_playwright
+import uvicorn
 
 from hera_providers import (
     FakeProvider,
