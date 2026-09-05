@@ -29,8 +29,8 @@ from hera_providers import (
     FakeProvider,
     ThinkingDelta,
     TurnEnd,
-    tool_call,
     text_turn,
+    tool_call,
 )
 from hera_providers.events import Event
 from hera_providers.request import ChatRequest
@@ -101,12 +101,12 @@ def free_port() -> int:
 
 def serve(home: Path) -> tuple[str, uvicorn.Server, threading.Thread]:
     """The real app on a free port, with its own disposable home."""
+    import os
+
     from hera_core.app import create_app
     from hera_core.boot import prepare
     from hera_core.settings import CoreSettings
     from hera_core.wiring import build_services
-
-    import os
 
     os.environ["HERA_HOME"] = str(home)
     os.environ["HERA_STORAGE_URL"] = f"sqlite:///{home / 'hera.sqlite3'}"
@@ -206,8 +206,8 @@ def main() -> int:
             chat_url = walk(desktop.new_page(), base, shots)
             desktop.close()
 
-            for label, viewport in (("phone", {"width": 390, "height": 844}),):
-                mobile = browser.new_context(viewport=viewport)
+            for label in ("phone",):
+                mobile = browser.new_context(viewport={"width": 390, "height": 844})
                 page = mobile.new_page()
                 page.goto(base, wait_until="networkidle")
                 shoot(page, shots, f"07-start-{label}")
