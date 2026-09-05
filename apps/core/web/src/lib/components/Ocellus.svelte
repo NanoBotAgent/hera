@@ -44,10 +44,7 @@
 		{#if morph}
 			<!-- the feather the iris folds into while she is still without words -->
 			<g class="feather">
-				<path
-					class="vane"
-					d="M12 5.6 C 15.4 7.9 15.4 13.1 12 18.4 C 8.6 13.1 8.6 7.9 12 5.6 Z"
-				/>
+				<path class="vane" d="M12 5.6 C 15.4 7.9 15.4 13.1 12 18.4 C 8.6 13.1 8.6 7.9 12 5.6 Z" />
 				<circle class="spot" cx="12" cy="10.6" r="1.9" />
 				<path class="shaft" d="M11.5 6 V 21.5" />
 			</g>
