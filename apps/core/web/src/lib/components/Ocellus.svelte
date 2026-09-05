@@ -174,22 +174,29 @@
 		--beat: 2.4s;
 	}
 
+	/* `ease-in-out` rather than the interface's usual ease-out, because this one loops: every
+	   segment has to arrive at rest and leave from rest, or the joins read as jerks. The throw is
+	   the single exception and overrides it on its own keyframe. */
 	.burst .eye {
 		transform-origin: 12px 12px;
-		animation: swell var(--beat) var(--ease) infinite;
+		animation: swell var(--beat) ease-in-out infinite;
 	}
 
 	.burst .plume {
 		transform-origin: 12px 12px;
-		animation: fan var(--beat) var(--ease) infinite;
+		animation: fan var(--beat) ease-in-out infinite;
 	}
 
-	/* The fan turns as it goes, so the display is never quite the same shape twice. Exactly one
-	   feather's spacing per beat, which makes the loop seamless: eight blades 45° apart are
-	   indistinguishable from the same eight turned 45°. */
+	/* The turn is deliberately *not* on the beat. Rotating exactly one feather's spacing per beat
+	   looks seamless in isolation and is the reason the fan appeared to snap back: every throw
+	   sampled the same 45° arc, so the tail came out at the angle the last one started from and
+	   the drift that happened while it was folded away was invisible. An interval that does not
+	   divide into the beat means each display picks up further round than the last, which is what
+	   a turn that never stopped actually looks like. The keyframe still spans exactly 45°, so the
+	   rotation itself remains seamless — eight blades 45° apart are the same eight turned 45°. */
 	.burst .plumes {
 		transform-origin: 12px 12px;
-		animation: turn var(--beat) linear infinite;
+		animation: turn 3.1s linear infinite;
 	}
 
 	/* `look` rotates a plain disc, which shows nothing, and its scale would fight the swell. */
@@ -245,22 +252,26 @@
 	}
 
 	/* Both halves of the display run on one set of stops, so the eye is at its widest exactly
-	   while the tail is: a moment of rest, a snapped throw, a hold, then the fold back — and the
-	   eye carries on past its resting size on the way home, which is the bounce. It spends the
-	   last fifth easing back up from there, so even the quietest part of the beat is still
-	   moving. */
+	   while the tail is: the throw, a hold, then the fold back — and the eye carries on past its
+	   resting size on the way home, which is the bounce. It spends the last fifth easing back up
+	   from there, so even the quietest part of the beat is still moving.
+
+	   The launch curve leaves from rest and overshoots, rather than the back-out it used to use.
+	   A back-out starts at roughly four times its average speed, and the previous beat had just
+	   finished decelerating into the loop point — so position matched across the join and velocity
+	   did not, which is exactly what a jerk is. Everything here now begins and ends at a
+	   standstill. */
 	@keyframes swell {
-		0%,
-		4% {
+		0% {
 			transform: scale(1);
-			animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+			animation-timing-function: cubic-bezier(0.45, 0, 0.35, 1.35);
 		}
 		32%,
 		58% {
 			transform: scale(1.16);
 		}
 		80% {
-			transform: scale(0.94);
+			transform: scale(0.96);
 		}
 		100% {
 			transform: scale(1);
@@ -296,12 +307,11 @@
 	}
 
 	@keyframes fan {
-		0%,
-		4% {
+		0% {
 			transform: translateY(0) scale(0.12);
 			opacity: 0;
-			/* Governs the throw alone, so the tail opens with a snap and the fold back stays soft. */
-			animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+			/* The throw, on the same from-rest overshoot as the swell it happens with. */
+			animation-timing-function: cubic-bezier(0.45, 0, 0.35, 1.35);
 		}
 		32%,
 		58% {
@@ -312,7 +322,6 @@
 			transform: translateY(-1px) scale(0.2);
 			opacity: 0;
 		}
-		92%,
 		100% {
 			transform: translateY(0) scale(0.12);
 			opacity: 0;

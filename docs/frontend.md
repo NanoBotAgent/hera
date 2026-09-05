@@ -282,10 +282,14 @@ words the ocellus **displays**, at 22 px rather than the usual 16: over a 2.4-se
 swells, eight feathers throw outward in every direction, hold, and fold back behind it — the one
 bounce in the interface, and it is there because a waiting mark that does not move is the thing
 [issue #44](https://github.com/VoidEUW/hera/issues/44) was opened about. The fan turns as it
-goes, by exactly one feather's spacing per beat, which is what makes the turn seamless: eight
-blades 45° apart are the same eight blades turned 45°. Once she is speaking it settles onto the
-slower four-second cycle: the iris rotates once, with the ring breathing between 60 % and 100 %
-opacity. Both are slow enough to read as attention rather than as a spinner.
+goes, over 45° — eight blades 45° apart are the same eight blades turned 45°, so the rotation
+loops with no seam. Its 3.1 s interval is deliberately not the beat and does not divide into it:
+on the beat, every throw sampled the same arc and the tail came back out at the angle the last
+one started from, which read as the turn resetting each time. Off it, each display picks up
+about 35° further round than the last, which is what a turn that never stopped looks like. Once
+she is speaking it settles onto the slower four-second cycle: the iris rotates once, with the
+ring breathing between 60 % and 100 % opacity. Both are slow enough to read as attention rather
+than as a spinner.
 
 **The display is shorter than the settled state on purpose.** It is one gesture with a beginning
 and an end, so whatever is left after it finishes is a still circle, and the way to have less of
@@ -294,6 +298,13 @@ filled it — the mark dimming and coming back up between throws — was tried a
 next to a gesture this smooth reads as a different animation borrowed from somewhere else. What
 covers the quiet part instead is the eye easing back up from the bounce, which runs to the end of
 the beat.
+
+Because it loops, every segment of it starts and ends at a standstill, which is why the burst
+runs on `ease-in-out` rather than the ease-out everything else uses. The throw overrides that
+with a curve that leaves from rest and overshoots, rather than the back-out it first used: a
+back-out opens at roughly four times its average speed, and the previous beat had just finished
+decelerating into the loop point, so position matched across the join and velocity did not. That
+is the whole of what a jerky restart is.
 
 **The tail comes back in rather than being cut off.** When her first words land the throw and
 the swell freeze where they stand and the fan is drawn into the eye over 460 ms, still turning
