@@ -22,8 +22,10 @@ from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Any
 
-from playwright.sync_api import Page, sync_playwright
 import uvicorn
+from hera_providers.events import Event
+from hera_providers.request import ChatRequest
+from playwright.sync_api import Page, sync_playwright
 
 from hera_providers import (
     FakeProvider,
@@ -32,8 +34,6 @@ from hera_providers import (
     text_turn,
     tool_call,
 )
-from hera_providers.events import Event
-from hera_providers.request import ChatRequest
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC = ROOT / "apps" / "core" / "src" / "hera_core" / "static"
