@@ -41,4 +41,4 @@ jobs:
           # given the workflow definition to rewrite.
           gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/preview.yml/dispatches" \
             -f "ref=${DEFAULT_BRANCH}" \
-            --field "inputs[pr_number]=${PR_NUMBER}"
+            --raw-field "inputs[pr_number]=${PR_NUMBER}"
