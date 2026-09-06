@@ -209,15 +209,19 @@ def main() -> int:
             browser = playwright.chromium.launch()
 
             desktop = browser.new_context(
-                viewport={"width": 1280, "height": 800},
+                viewport={"width": 1920, "height": 1080},
+                device_scale_factor=2,
                 record_video_dir=str(videos),
-                record_video_size={"width": 1280, "height": 800},
+                record_video_size={"width": 1920, "height": 1080},
             )
             chat_url = walk(desktop.new_page(), base, shots)
             desktop.close()
 
             for label in ("phone",):
-                mobile = browser.new_context(viewport={"width": 390, "height": 844})
+                mobile = browser.new_context(
+                    viewport={"width": 390, "height": 844},
+                    device_scale_factor=3,
+                )
                 page = mobile.new_page()
                 page.goto(base, wait_until="networkidle")
                 shoot(page, shots, f"07-start-{label}")
