@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}/reactions" \
-            -f content=eyes
+            -f content=eyes || echo "::warning::Could not react to the comment; dispatching anyway."
           # Dispatch against the default branch so the workflow that runs is a trusted
           # copy; the pull request's own tree is only ever checked out and built, never
           # given the workflow definition to rewrite.
