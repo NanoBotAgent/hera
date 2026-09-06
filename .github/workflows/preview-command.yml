@@ -48,9 +48,8 @@ jobs:
               --jq '"\(.head.sha) \(.head.ref)"'
           )
 
-          run_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/preview.yml/runs?event=pull_request&per_page=20" \
-            --jq --arg sha "$head_sha" \
-            '[.workflow_runs[] | select(.head_sha == $sha)] | .[0].id // ""')"
+          runs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/preview.yml/runs?event=pull_request&per_page=20")"
+          run_id="$(printf '%s' "$runs_json" | jq -r --arg sha "$head_sha" '[.workflow_runs[] | select(.head_sha == $sha)] | .[0].id // ""')"
 
           if [ -z "$run_id" ]; then
             gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f \
