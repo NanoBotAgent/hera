@@ -76,12 +76,13 @@ jobs:
           # The download lives outside the repo so switching branches cannot collide with it.
           mv media /tmp/preview-media-artifact
           # Pull request comments strip <video> tags; a GIF renders inline everywhere. Two
-          # passes with a 128-colour palette keep it watchable without exploding the size, and
-          # it is cut to 30 seconds so the comment stays well under the embedding limit.
+          # passes with a 160-colour palette keep it watchable without exploding the size, and
+          # it is cut to 30 seconds so the comment stays well under the embedding limit. The
+          # film is recorded at 1080p; 1280 px wide keeps the GIF readable and light.
           video="$(ls /tmp/preview-media-artifact/videos/*.webm 2>/dev/null | head -1 || true)"
           if [ -n "$video" ]; then
             ffmpeg -hide_banner -loglevel error -t 30 -i "$video" \
-              -vf "fps=10,scale=640:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer" \
+              -vf "fps=12,scale=1280:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=160[p];[s1][p]paletteuse=dither=bayer" \
               -loop 0 "${video%.webm}.gif"
           fi
           if git ls-remote --exit-code --heads origin previews-media >/dev/null 2>&1; then
