@@ -79,6 +79,11 @@ jobs:
           git add -A
           git commit -m "Preview media for PR #${PR_NUMBER}"
           git push --force origin previews-media
+          # Remember the film's name for the comment step; the checkout below wipes this tree.
+          video="$(ls "$dest/videos"/*.webm 2>/dev/null | head -1 || true)"
+          if [ -n "$video" ]; then
+            echo "PREVIEW_VIDEO=$(basename "$video")" >> "$GITHUB_ENV"
+          fi
           # The composite actions only exist in the PR tree; leave that tree checked out so the
           # post-run teardown can still find them.
           git checkout "$GITHUB_SHA"
@@ -105,11 +110,12 @@ jobs:
             echo "| Phone: start | Phone: answer |"
             echo "| --- | --- |"
             echo "| ![]($base/screenshots/07-start-phone.png) | ![]($base/screenshots/08-answer-phone.png) |"
-            echo
-            video="$(cd "pr-${PR_NUMBER}/videos" && ls *.webm | head -1)"
-            echo "### Video"
-            echo
-            echo "<video src=\"$base/videos/${video}\" controls muted></video>"
+            if [ -n "${PREVIEW_VIDEO:-}" ]; then
+              echo
+              echo "### Video"
+              echo
+              echo "<video src=\"$base/videos/${PREVIEW_VIDEO}\" controls muted></video>"
+            fi
           } > comment.md
           gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body-file comment.md
 
