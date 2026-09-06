@@ -60,6 +60,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           staging="$(mktemp -d)"
           cp -r preview-media/. "$staging/"
+          rm -rf preview-media
           dest="pr-${PR_NUMBER}"
           if git ls-remote --exit-code --heads origin previews-media >/dev/null 2>&1; then
             git fetch origin previews-media
