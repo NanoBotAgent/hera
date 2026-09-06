@@ -1,0 +1,44 @@
+name: Preview command
+
+# The on-demand half of the preview flow. A comment saying "/preview" on a pull request
+# re-films that pull request; the resulting capture still reaches the walkthrough comment
+# through preview-comment.yml, exactly like a push-triggered one. Restricted to people with
+# write access -- a stranger's comment must not queue a five-minute job.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  dispatch:
+    if: >-
+      ${{
+        github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, '/preview') &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      COMMENT_ID: ${{ github.event.comment.id }}
+      PR_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - name: Request a fresh capture
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}/reactions" \
+            -f content=eyes
+          # Dispatch against the default branch so the workflow that runs is a trusted
+          # copy; the pull request's own tree is only ever checked out and built, never
+          # given the workflow definition to rewrite.
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/preview.yml/dispatches" \
+            -f "ref=${DEFAULT_BRANCH}" \
+            --field "inputs[pr_number]=${PR_NUMBER}"
