@@ -79,6 +79,9 @@ jobs:
           git add -A
           git commit -m "Preview media for PR #${PR_NUMBER}"
           git push --force origin previews-media
+          # The composite actions only exist in the PR tree; leave that tree checked out so the
+          # post-run teardown can still find them.
+          git checkout "$GITHUB_SHA"
 
       - name: Comment the media on the pull request
         if: success()

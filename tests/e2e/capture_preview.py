@@ -159,7 +159,7 @@ def walk(page: Page, base: str, directory: Path) -> str:
     # waiting mark that trips on a slow runner is not worth failing the whole shoot for, so if
     # it never shows we carry on and catch the answer instead.
     try:
-        page.wait_for_selector(".waiting", timeout=8_000)
+        page.wait_for_selector(".waiting", timeout=15_000)
         page.wait_for_timeout(1400)
         shoot(page, directory, "02-waiting-feather")
         page.wait_for_timeout(1900)
