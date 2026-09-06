@@ -84,6 +84,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           dest="pr-${PR_NUMBER}"
+          # Not every runner image ships ffmpeg.
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          fi
           # The download lives outside the repo so switching branches cannot collide with it.
           mv media /tmp/preview-media-artifact
           # Pull request comments strip <video> tags; a GIF renders inline everywhere. Two
