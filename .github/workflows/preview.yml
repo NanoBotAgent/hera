@@ -18,7 +18,6 @@ on:
       pr_number:
         description: Pull request to film, e.g. 50
         required: true
-        type: number
 
 permissions:
   contents: read
