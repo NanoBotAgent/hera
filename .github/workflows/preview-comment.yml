@@ -70,6 +70,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           dest="pr-${PR_NUMBER}"
+          # The download lives outside the repo so switching branches cannot collide with it.
+          mv media /tmp/preview-media-artifact
           if git ls-remote --exit-code --heads origin previews-media >/dev/null 2>&1; then
             git fetch origin previews-media
             git checkout previews-media
@@ -80,7 +82,7 @@ jobs:
           fi
           rm -rf "$dest"
           mkdir -p "$dest"
-          cp -r media/. "$dest/"
+          cp -r /tmp/preview-media-artifact/. "$dest/"
           git add -A
           git commit -m "Preview media for PR #${PR_NUMBER}"
           git push origin previews-media
