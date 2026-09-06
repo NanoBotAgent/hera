@@ -72,6 +72,15 @@ jobs:
           dest="pr-${PR_NUMBER}"
           # The download lives outside the repo so switching branches cannot collide with it.
           mv media /tmp/preview-media-artifact
+          # Pull request comments strip <video> tags; a GIF renders inline everywhere. Two
+          # passes with a 128-colour palette keep it watchable without exploding the size, and
+          # it is cut to 30 seconds so the comment stays well under the embedding limit.
+          video="$(ls /tmp/preview-media-artifact/videos/*.webm 2>/dev/null | head -1 || true)"
+          if [ -n "$video" ]; then
+            ffmpeg -hide_banner -loglevel error -t 30 -i "$video" \
+              -vf "fps=10,scale=640:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer" \
+              -loop 0 "${video%.webm}.gif"
+          fi
           if git ls-remote --exit-code --heads origin previews-media >/dev/null 2>&1; then
             git fetch origin previews-media
             git checkout previews-media
@@ -86,9 +95,9 @@ jobs:
           git add -A
           git commit -m "Preview media for PR #${PR_NUMBER}"
           git push origin previews-media
-          video="$(ls "$dest/videos"/*.webm 2>/dev/null | head -1 || true)"
           if [ -n "$video" ]; then
             echo "PREVIEW_VIDEO=$(basename "$video")" >> "$GITHUB_ENV"
+            echo "PREVIEW_GIF=$(basename "${video%.webm}.gif")" >> "$GITHUB_ENV"
           fi
 
       - name: Write the comment body
@@ -113,11 +122,13 @@ jobs:
               echo "| Phone: start | Phone: answer |"
               echo "| --- | --- |"
               echo "| ![]($base/screenshots/07-start-phone.png) | ![]($base/screenshots/08-answer-phone.png) |"
-              if [ -n "${PREVIEW_VIDEO:-}" ]; then
+              if [ -n "${PREVIEW_GIF:-}" ]; then
                 echo
                 echo "### Video"
                 echo
-                echo "<video src=\"$base/videos/${PREVIEW_VIDEO}\" controls muted></video>"
+                echo "![Turn walkthrough]($base/videos/${PREVIEW_GIF})"
+                echo
+                echo "[Full-quality webm]($base/videos/${PREVIEW_VIDEO})"
               fi
             } > comment.md
           else
