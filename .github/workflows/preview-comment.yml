@@ -30,18 +30,18 @@ jobs:
       RUN_ID: ${{ github.event.workflow_run.id }}
       HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
       CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-      EVENT_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+      HEAD_REPO_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
     steps:
       - name: Find the pull request
         id: pr
         run: |
           set -euo pipefail
-          number="${EVENT_PR}"
-          if [ -z "$number" ]; then
-            # Events raised for a fork's pull request leave pull_requests empty; the head
-            # commit is still reachable here through the pull request refs.
-            number="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" --jq '.[0].number // ""')"
-          fi
+          # The pull_requests array on the event leaks pull requests from the network of
+          # forks (same head commit resolves to the wrong repo's number), so ask this repo
+          # which of its pull requests owns the reporting branch instead.
+          number="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?head=${HEAD_REPO_OWNER}:${HEAD_BRANCH}&state=open" --jq '.[0].number // ""')"
+
           if [ -z "$number" ]; then
             echo "No pull request points at ${HEAD_SHA}; nothing to report on."
             exit 0
