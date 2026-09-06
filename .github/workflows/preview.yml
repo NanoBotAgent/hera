@@ -10,7 +10,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -50,8 +50,62 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      - name: Publish media to the previews branch
+        if: success()
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin previews-media >/dev/null 2>&1; then
+            git fetch origin previews-media
+            git checkout previews-media
+            git reset --hard origin/previews-media
+          else
+            git checkout --orphan previews-media
+            git rm -rf . || true
+          fi
+          dest="pr-${PR_NUMBER}"
+          rm -rf "$dest"
+          mkdir -p "$dest"
+          cp -r preview-media/. "$dest/"
+          git add -A
+          git commit -m "Preview media for PR #${PR_NUMBER}"
+          git push --force origin previews-media
+
+      - name: Comment the media on the pull request
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          base="https://raw.githubusercontent.com/${{ github.repository }}/previews-media/pr-${PR_NUMBER}"
+          {
+            echo "### Preview walkthrough"
+            echo
+            echo "| Start | Waiting (feather) | Waiting (eye) |"
+            echo "| --- | --- | --- |"
+            echo "| ![]($base/screenshots/01-start.png) | ![]($base/screenshots/02-waiting-feather.png) | ![]($base/screenshots/03-waiting-eye.png) |"
+            echo
+            echo "| First answer | Long trace (collapsed) | Long trace (open) |"
+            echo "| --- | --- | --- |"
+            echo "| ![]($base/screenshots/04-first-answer.png) | ![]($base/screenshots/05-long-trace-collapsed.png) | ![]($base/screenshots/06-long-trace-open.png) |"
+            echo
+            echo "| Phone: start | Phone: answer |"
+            echo "| --- | --- |"
+            echo "| ![]($base/screenshots/07-start-phone.png) | ![]($base/screenshots/08-answer-phone.png) |"
+            echo
+            video="$(cd "pr-${PR_NUMBER}/videos" && ls *.webm | head -1)"
+            echo "### Video"
+            echo
+            echo "<video src=\"$base/videos/${video}\" controls muted></video>"
+          } > comment.md
+          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body-file comment.md
+
       - name: Tell the pull request where they are
-        if: always()
+        if: failure()
         uses: actions/github-script@v7
         with:
           script: |
@@ -61,5 +115,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `Screenshot-and-video walkthrough of this branch is done: ${url}`,
+              body: `Preview capture failed; any media that made it is here: ${url}`,
             });
