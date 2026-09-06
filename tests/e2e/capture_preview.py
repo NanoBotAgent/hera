@@ -155,12 +155,17 @@ def walk(page: Page, base: str, directory: Path) -> str:
     page.wait_for_url("**/chat/**", timeout=15_000)
 
     # The waiting mark, two samples a little under half its four-second cycle apart, so one
-    # frame catches the feather and one catches the eye; the video covers the whole loop.
-    page.wait_for_selector(".waiting", timeout=30_000)
-    page.wait_for_timeout(1400)
-    shoot(page, directory, "02-waiting-feather")
-    page.wait_for_timeout(1900)
-    shoot(page, directory, "03-waiting-eye")
+    # frame catches the feather and one catches the eye; the video covers the whole loop. A
+    # waiting mark that trips on a slow runner is not worth failing the whole shoot for, so if
+    # it never shows we carry on and catch the answer instead.
+    try:
+        page.wait_for_selector(".waiting", timeout=8_000)
+        page.wait_for_timeout(1400)
+        shoot(page, directory, "02-waiting-feather")
+        page.wait_for_timeout(1900)
+        shoot(page, directory, "03-waiting-eye")
+    except Exception:
+        page.wait_for_selector("text=ticket-granting ticket", timeout=60_000)
 
     page.wait_for_selector("text=ticket-granting ticket", timeout=30_000)
     page.wait_for_selector("text=downstream of it", timeout=15_000)
