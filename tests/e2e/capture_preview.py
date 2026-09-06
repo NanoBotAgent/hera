@@ -156,7 +156,7 @@ def walk(page: Page, base: str, directory: Path) -> str:
 
     # The waiting mark, two samples a little under half its four-second cycle apart, so one
     # frame catches the feather and one catches the eye; the video covers the whole loop.
-    page.wait_for_selector(".waiting", timeout=15_000)
+    page.wait_for_selector(".waiting", timeout=30_000)
     page.wait_for_timeout(1400)
     shoot(page, directory, "02-waiting-feather")
     page.wait_for_timeout(1900)
