@@ -1,15 +1,11 @@
 name: Preview comment
 
-# Publishes the media a Preview run filmed and reports on the pull request. Runs in this
-# repository after the capture run finishes, so it holds a write token even when the pull
-# request came from a fork. The media is untrusted input in the sense that the fork's run
-# produced it, but it is rendered (screenshots, one video) rather than executed: it is
-# committed to the previews-media branch as-is and embedded in the comment.
-
 on:
   workflow_run:
     workflows: [Preview]
     types: [completed]
+
+# Contents: commit the media. Pull requests / issues: write and update the comment.
 
 permissions:
   contents: write
@@ -23,8 +19,8 @@ concurrency:
 jobs:
   publish:
     # Cancelled runs are a newer capture taking over; their half-filmed output would only
-    # make the comment stale. pull_request covers pushes; workflow_dispatch covers the
-    # /preview comment command.
+    # make the comment stale. pull_request covers pushes (including reruns from /preview);
+    # workflow_dispatch covers manual re-films from the Actions tab.
     if: >-
       ${{ (github.event.workflow_run.event == 'pull_request' ||
            github.event.workflow_run.event == 'workflow_dispatch') &&
@@ -34,18 +30,19 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RUN_ID: ${{ github.event.workflow_run.id }}
-      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      EVENT: ${{ github.event_name }}
       CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-      HEAD_REPO_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
       HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      HEAD_REPO_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
     steps:
       - name: Find the pull request
         id: pr
         run: |
           set -euo pipefail
-          # The pull_requests array on the event leaks pull requests from the network of
-          # forks (same head commit resolves to the wrong repo's number), so ask this repo
-          # which of its pull requests owns the reporting branch instead.
+          # workflow_run for fork pull requests often reports an empty pull_requests array,
+          # so resolve via head branch instead. Reopening a closed pull request keeps the
+          # old branch around too; only open pull requests are considered.
           number="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?head=${HEAD_REPO_OWNER}:${HEAD_BRANCH}&state=open" --jq '.[0].number // ""')"
           echo "number=$number" >> "$GITHUB_OUTPUT"
 
@@ -63,12 +60,12 @@ jobs:
 
       - name: Find the pull request from the marker
         id: pr_marker
-        if: steps.pr.outputs.number == '' && env.CONCLUSION == 'success'
+        if: (steps.pr.outputs.number || '') == '' && env.CONCLUSION == 'success'
         run: |
           set -euo pipefail
-          # A capture a /preview comment dispatched ran on the default branch, so the run's
-          # own branch does not name the pull request. The capture leaves the number in the
-          # artifact (preview.yml, "Note which pull request this is").
+          # A capture dispatched by hand ran on the default branch, so the run's own branch
+          # does not name the pull request. The capture leaves the number in the artifact
+          # (preview.yml, "Note which pull request this is").
           marker="media/pr-number"
           number="$( [ -f "$marker" ] && tr -d ' \n\r' < "$marker" || true)"
           if [ -z "$number" ]; then
@@ -84,9 +81,6 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number || steps.pr_marker.outputs.number }}
         run: |
           set -euo pipefail
-          if ! command -v ffmpeg >/dev/null; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           dest="pr-${PR_NUMBER}"
@@ -128,22 +122,25 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number || steps.pr_marker.outputs.number }}
         run: |
           set -euo pipefail
-          if [ "$CONCLUSION" = success ]; then
-            base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/previews-media/pr-${PR_NUMBER}"
-            {
+          base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/previews-media/pr-${PR_NUMBER}"
+          {
+            echo "<!-- preview-walkthrough -->"
+            if [ "${{ env.CONCLUSION != 'success' }}" = "true" ]; then
               echo "### Preview walkthrough"
               echo
-              echo "| Start | Waiting (feather) | Waiting (eye) |"
-              echo "| --- | --- | --- |"
-              echo "| ![]($base/screenshots/01-start.png) | ![]($base/screenshots/02-waiting-feather.png) | ![]($base/screenshots/03-waiting-eye.png) |"
+              echo "The latest preview capture for this pull request did not finish. Click through to the run to see why: <https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}>"
+            else
+              echo "### Preview walkthrough"
               echo
-              echo "| First answer | Long trace (collapsed) | Long trace (open) |"
-              echo "| --- | --- | --- |"
-              echo "| ![]($base/screenshots/04-first-answer.png) | ![]($base/screenshots/05-long-trace-collapsed.png) | ![]($base/screenshots/06-long-trace-open.png) |"
+              echo "Latest capture: [run ${RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID})"
               echo
-              echo "| Phone: start | Phone: answer |"
-              echo "| --- | --- |"
-              echo "| ![]($base/screenshots/07-start-phone.png) | ![]($base/screenshots/08-answer-phone.png) |"
+              echo "| Start | Chat | Answered | Composer active |"
+              echo "| --- | --- | --- | --- |"
+              echo "| ![]($base/01-start.png) | ![]($base/02-chat-column.png) | ![]($base/04-answered.png) | ![]($base/05-composer-active.png) |"
+              echo
+              echo "| Waiting (feather) | Waiting (eye) | Phone | Phone answered |"
+              echo "| --- | --- | --- | --- |"
+              echo "| ![]($base/03a-waiting-feather.png) | ![]($base/03b-waiting-eye.png) | ![]($base/06-phone.png) | ![]($base/07-phone-answered.png) |"
               if [ -n "${PREVIEW_GIF:-}" ]; then
                 echo
                 echo "### Video"
@@ -152,11 +149,17 @@ jobs:
                 echo
                 echo "[Full-quality webm]($base/videos/${PREVIEW_VIDEO})"
               fi
-            } > comment.md
-          else
-            url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}#artifacts"
-            echo "Preview capture did not finish; any media that made it is here: $url" > comment.md
-          fi
+              echo
+              echo "<details><summary>Plain links</summary>"
+              echo
+              for f in media/static/*.png; do
+                name="$(basename "$f")"
+                echo "- [$name]($base/$name)"
+              done
+              echo
+              echo "</details>"
+            fi
+          } > body.md
 
       - name: Post or update the pull request comment
         if: steps.pr.outputs.number || steps.pr_marker.outputs.number
@@ -165,29 +168,20 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number || steps.pr_marker.outputs.number }}
         with:
           script: |
-            const fs = require("fs");
-            const marker = "<!-- preview-walkthrough -->";
-            const pr = Number(process.env.PR_NUMBER);
-            const body = `${fs.readFileSync("comment.md", "utf8").trim()}\n\n${marker}`;
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr,
-              per_page: 100,
+            const fs = require('fs');
+            const marker = '<!-- preview-walkthrough -->';
+            const body = fs.readFileSync('body.md', 'utf8');
+            const { owner, repo } = context.repo;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number: Number(process.env.PR_NUMBER), per_page: 100,
             });
-            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            const existing = comments.find((c) => c.body.includes(marker));
             if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              core.info(`Updated comment ${existing.id} on PR #${process.env.PR_NUMBER}`);
             } else {
               await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr,
-                body,
+                owner, repo, issue_number: Number(process.env.PR_NUMBER), body,
               });
+              core.info(`Posted walkthrough comment on PR #${process.env.PR_NUMBER}`);
             }
