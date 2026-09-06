@@ -1,0 +1,157 @@
+name: Preview comment
+
+# Publishes the media a Preview run filmed and reports on the pull request. Runs in this
+# repository after the capture run finishes, so it holds a write token even when the pull
+# request came from a fork. The media is untrusted input in the sense that the fork's run
+# produced it, but it is rendered (screenshots, one video) rather than executed: it is
+# committed to the previews-media branch as-is and embedded in the comment.
+
+on:
+  workflow_run:
+    workflows: [Preview]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: preview-comment
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      EVENT_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+    steps:
+      - name: Find the pull request
+        id: pr
+        run: |
+          set -euo pipefail
+          number="${EVENT_PR}"
+          if [ -z "$number" ]; then
+            # Events raised for a fork's pull request leave pull_requests empty; the head
+            # commit is still reachable here through the pull request refs.
+            number="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" --jq '.[0].number // ""')"
+          fi
+          if [ -z "$number" ]; then
+            echo "No pull request points at ${HEAD_SHA}; nothing to report on."
+            exit 0
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Check out this repository
+        if: steps.pr.outputs.number
+        uses: actions/checkout@v4
+
+      - name: Fetch the filmed media
+        if: steps.pr.outputs.number && env.CONCLUSION == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: preview-media
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: media/
+
+      - name: Publish media to the previews branch
+        if: steps.pr.outputs.number && env.CONCLUSION == 'success'
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          dest="pr-${PR_NUMBER}"
+          if git ls-remote --exit-code --heads origin previews-media >/dev/null 2>&1; then
+            git fetch origin previews-media
+            git checkout previews-media
+            git reset --hard origin/previews-media
+          else
+            git checkout --orphan previews-media
+            git rm -rf . || true
+          fi
+          rm -rf "$dest"
+          mkdir -p "$dest"
+          cp -r media/. "$dest/"
+          git add -A
+          git commit -m "Preview media for PR #${PR_NUMBER}"
+          git push origin previews-media
+          video="$(ls "$dest/videos"/*.webm 2>/dev/null | head -1 || true)"
+          if [ -n "$video" ]; then
+            echo "PREVIEW_VIDEO=$(basename "$video")" >> "$GITHUB_ENV"
+          fi
+
+      - name: Write the comment body
+        if: steps.pr.outputs.number
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          if [ "$CONCLUSION" = success ]; then
+            base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/previews-media/pr-${PR_NUMBER}"
+            {
+              echo "### Preview walkthrough"
+              echo
+              echo "| Start | Waiting (feather) | Waiting (eye) |"
+              echo "| --- | --- | --- |"
+              echo "| ![]($base/screenshots/01-start.png) | ![]($base/screenshots/02-waiting-feather.png) | ![]($base/screenshots/03-waiting-eye.png) |"
+              echo
+              echo "| First answer | Long trace (collapsed) | Long trace (open) |"
+              echo "| --- | --- | --- |"
+              echo "| ![]($base/screenshots/04-first-answer.png) | ![]($base/screenshots/05-long-trace-collapsed.png) | ![]($base/screenshots/06-long-trace-open.png) |"
+              echo
+              echo "| Phone: start | Phone: answer |"
+              echo "| --- | --- |"
+              echo "| ![]($base/screenshots/07-start-phone.png) | ![]($base/screenshots/08-answer-phone.png) |"
+              if [ -n "${PREVIEW_VIDEO:-}" ]; then
+                echo
+                echo "### Video"
+                echo
+                echo "<video src=\"$base/videos/${PREVIEW_VIDEO}\" controls muted></video>"
+              fi
+            } > comment.md
+          else
+            url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}#artifacts"
+            echo "Preview capture did not finish; any media that made it is here: $url" > comment.md
+          fi
+
+      - name: Post or update the pull request comment
+        if: steps.pr.outputs.number
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        with:
+          script: |
+            const fs = require("fs");
+            const marker = "<!-- preview-walkthrough -->";
+            const pr = Number(process.env.PR_NUMBER);
+            const body = `${fs.readFileSync("comment.md", "utf8").trim()}\n\n${marker}`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr,
+                body,
+              });
+            }

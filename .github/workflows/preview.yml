@@ -5,13 +5,17 @@ name: Preview
 # reviewer would walk to -- start page, the waiting mark mid-breath, answers, a long trace,
 # the phone -- and attaches screenshots and a video to the run. No live endpoint, nothing
 # deployed, everything disposable.
+#
+# This job only films and uploads; preview-comment.yml (workflow_run) publishes the media to
+# the previews-media branch and comments on the pull request. Keeping the two apart is what
+# lets the flow work for pull requests opened from forks: this run holds a read-only token,
+# and the follow-up run in this repository holds the write token.
 
 on:
   pull_request:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: preview-${{ github.event.pull_request.number || github.ref }}
@@ -49,86 +53,3 @@ jobs:
           path: preview-media/
           retention-days: 14
           if-no-files-found: error
-
-      - name: Publish media to the previews branch
-        if: success()
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          staging="$(mktemp -d)"
-          cp -r preview-media/. "$staging/"
-          rm -rf preview-media
-          dest="pr-${PR_NUMBER}"
-          if git ls-remote --exit-code --heads origin previews-media >/dev/null 2>&1; then
-            git fetch origin previews-media
-            git checkout previews-media
-            git reset --hard origin/previews-media
-          else
-            git checkout --orphan previews-media
-            git rm -rf . || true
-          fi
-          # A botched earlier run left the raw capture folder itself tracked on this branch;
-          # the per-PR folder is the only thing that should ever live here.
-          git rm -rf --ignore-unmatch preview-media
-          rm -rf "$dest"
-          mkdir -p "$dest"
-          cp -r "$staging/." "$dest/"
-          git add -A
-          git commit -m "Preview media for PR #${PR_NUMBER}"
-          git push --force origin previews-media
-          # Remember the film's name for the comment step; the checkout below wipes this tree.
-          video="$(ls "$dest/videos"/*.webm 2>/dev/null | head -1 || true)"
-          if [ -n "$video" ]; then
-            echo "PREVIEW_VIDEO=$(basename "$video")" >> "$GITHUB_ENV"
-          fi
-          # The composite actions only exist in the PR tree; leave that tree checked out so the
-          # post-run teardown can still find them.
-          git checkout "$GITHUB_SHA"
-
-      - name: Comment the media on the pull request
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          base="https://raw.githubusercontent.com/${{ github.repository }}/previews-media/pr-${PR_NUMBER}"
-          {
-            echo "### Preview walkthrough"
-            echo
-            echo "| Start | Waiting (feather) | Waiting (eye) |"
-            echo "| --- | --- | --- |"
-            echo "| ![]($base/screenshots/01-start.png) | ![]($base/screenshots/02-waiting-feather.png) | ![]($base/screenshots/03-waiting-eye.png) |"
-            echo
-            echo "| First answer | Long trace (collapsed) | Long trace (open) |"
-            echo "| --- | --- | --- |"
-            echo "| ![]($base/screenshots/04-first-answer.png) | ![]($base/screenshots/05-long-trace-collapsed.png) | ![]($base/screenshots/06-long-trace-open.png) |"
-            echo
-            echo "| Phone: start | Phone: answer |"
-            echo "| --- | --- |"
-            echo "| ![]($base/screenshots/07-start-phone.png) | ![]($base/screenshots/08-answer-phone.png) |"
-            if [ -n "${PREVIEW_VIDEO:-}" ]; then
-              echo
-              echo "### Video"
-              echo
-              echo "<video src=\"$base/videos/${PREVIEW_VIDEO}\" controls muted></video>"
-            fi
-          } > comment.md
-          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body-file comment.md
-
-      - name: Tell the pull request where they are
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { runId } = context;
-            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId}#artifacts`;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `Preview capture failed; any media that made it is here: ${url}`,
-            });
