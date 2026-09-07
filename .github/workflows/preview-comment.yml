@@ -126,7 +126,7 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number || steps.pr_marker.outputs.number }}
         run: |
           set -euo pipefail
-          base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/previews-media/pr-${PR_NUMBER}"
+          base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/previews-media/pr-${PR_NUMBER}/screenshots"
           {
             echo "<!-- preview-walkthrough -->"
             if [ "${{ env.CONCLUSION != 'success' }}" = "true" ]; then
@@ -138,25 +138,29 @@ jobs:
               echo
               echo "Latest capture: [run ${RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID})"
               echo
-              echo "| Start | Chat | Answered | Composer active |"
-              echo "| --- | --- | --- | --- |"
-              echo "| ![]($base/01-start.png) | ![]($base/02-chat-column.png) | ![]($base/04-answered.png) | ![]($base/05-composer-active.png) |"
+              echo "| Start | Waiting (feather) | Waiting (eye) |"
+              echo "| --- | --- | --- |"
+              echo "| ![]($base/01-start.png) | ![]($base/02-waiting-feather.png) | ![]($base/03-waiting-eye.png) |"
               echo
-              echo "| Waiting (feather) | Waiting (eye) | Phone | Phone answered |"
-              echo "| --- | --- | --- | --- |"
-              echo "| ![]($base/03a-waiting-feather.png) | ![]($base/03b-waiting-eye.png) | ![]($base/06-phone.png) | ![]($base/07-phone-answered.png) |"
+              echo "| First answer | Long trace (collapsed) | Long trace (open) |"
+              echo "| --- | --- | --- |"
+              echo "| ![]($base/04-first-answer.png) | ![]($base/05-long-trace-collapsed.png) | ![]($base/06-long-trace-open.png) |"
+              echo
+              echo "| Phone: start | Phone: answered |"
+              echo "| --- | --- |"
+              echo "| ![]($base/07-start-phone.png) | ![]($base/08-answer-phone.png) |"
               if [ -n "${PREVIEW_GIF:-}" ]; then
                 echo
                 echo "### Video"
                 echo
-                echo "![Turn walkthrough]($base/videos/${PREVIEW_GIF})"
+                echo "![Turn walkthrough](${base%/screenshots}/videos/${PREVIEW_GIF})"
                 echo
-                echo "[Full-quality webm]($base/videos/${PREVIEW_VIDEO})"
+                echo "[Full-quality webm](${base%/screenshots}/videos/${PREVIEW_VIDEO})"
               fi
               echo
               echo "<details><summary>Plain links</summary>"
               echo
-              for f in media/static/*.png; do
+              for f in media/screenshots/*.png; do
                 name="$(basename "$f")"
                 echo "- [$name]($base/$name)"
               done
