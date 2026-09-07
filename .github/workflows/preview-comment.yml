@@ -5,8 +5,6 @@ on:
     workflows: [Preview]
     types: [completed]
 
-# Contents: commit the media. Pull requests / issues: write and update the comment.
-
 permissions:
   contents: write
   pull-requests: write
@@ -18,9 +16,6 @@ concurrency:
 
 jobs:
   publish:
-    # Cancelled runs are a newer capture taking over; their half-filmed output would only
-    # make the comment stale. pull_request covers pushes (including reruns from /preview);
-    # workflow_dispatch covers manual re-films from the Actions tab.
     if: >-
       ${{ (github.event.workflow_run.event == 'pull_request' ||
            github.event.workflow_run.event == 'workflow_dispatch') &&
@@ -40,9 +35,6 @@ jobs:
         id: pr
         run: |
           set -euo pipefail
-          # workflow_run for fork pull requests often reports an empty pull_requests array,
-          # so resolve via head branch instead. Reopening a closed pull request keeps the
-          # old branch around too; only open pull requests are considered.
           number="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?head=${HEAD_REPO_OWNER}:${HEAD_BRANCH}&state=open" --jq '.[0].number // ""')"
           echo "number=$number" >> "$GITHUB_OUTPUT"
 
@@ -63,9 +55,6 @@ jobs:
         if: (steps.pr.outputs.number || '') == '' && env.CONCLUSION == 'success'
         run: |
           set -euo pipefail
-          # A capture dispatched by hand ran on the default branch, so the run's own branch
-          # does not name the pull request. The capture leaves the number in the artifact
-          # (preview.yml, "Note which pull request this is").
           marker="media/pr-number"
           number="$( [ -f "$marker" ] && tr -d ' \n\r' < "$marker" || true)"
           if [ -z "$number" ]; then
@@ -84,22 +73,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           dest="pr-${PR_NUMBER}"
-          # Not every runner image ships ffmpeg.
           if ! command -v ffmpeg >/dev/null 2>&1; then
             sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
           fi
-          # The download lives outside the repo so switching branches cannot collide with it.
           mv media /tmp/preview-media-artifact
-          # Pull request comments strip <video> tags; a GIF renders inline everywhere. Two
-          # passes with a 160-colour palette keep it watchable without exploding the size, and
-          # it is cut to 30 seconds so the comment stays well under the embedding limit. The
-          # film is recorded at 1080p; 1280 px wide keeps the GIF readable and light.
           video="$(ls /tmp/preview-media-artifact/videos/*.webm 2>/dev/null | head -1 || true)"
           if [ -n "$video" ]; then
             ffmpeg -hide_banner -loglevel error -t 30 -i "$video" \
               -vf "fps=12,scale=1280:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=160[p];[s1][p]paletteuse=dither=bayer" \
               -loop 0 "${video%.webm}.gif"
           fi
+          # Snapshot the screenshot filenames before they leave the working tree, so the
+          # comment step (which runs after media/ is gone) can still list them.
+          find /tmp/preview-media-artifact/screenshots -maxdepth 1 -type f -name '*.png' -printf '%f\n' | sort > /tmp/preview-media-shot-list
           if git ls-remote --exit-code --heads origin previews-media >/dev/null 2>&1; then
             git fetch origin previews-media
             git checkout previews-media
@@ -160,10 +146,10 @@ jobs:
               echo
               echo "<details><summary>Plain links</summary>"
               echo
-              for f in media/screenshots/*.png; do
-                name="$(basename "$f")"
+              while IFS= read -r name; do
+                [ -z "$name" ] && continue
                 echo "- [$name]($base/$name)"
-              done
+              done < /tmp/preview-media-shot-list
               echo
               echo "</details>"
             fi
