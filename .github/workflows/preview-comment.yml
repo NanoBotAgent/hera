@@ -40,6 +40,8 @@ jobs:
 
       - name: Check out this repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Fetch the filmed media
         if: env.CONCLUSION == 'success'
@@ -99,8 +101,14 @@ jobs:
           rm -f /tmp/preview-media-artifact/pr-number
           cp -r /tmp/preview-media-artifact/. "$dest/"
           git add -A
-          git commit -m "Preview media for PR #${PR_NUMBER}"
-          git push origin previews-media
+          # A repeat run can produce byte-identical media; committing an empty tree fails, so
+          # only commit when something is staged. The comment still goes out either way.
+          if ! git diff --cached --quiet; then
+            git commit -m "Preview media for PR #${PR_NUMBER}"
+            git push origin previews-media
+          else
+            echo "No media changes; skipping the empty commit."
+          fi
           if [ -n "$video" ]; then
             echo "PREVIEW_VIDEO=$(basename "$video")" >> "$GITHUB_ENV"
             echo "PREVIEW_GIF=$(basename "${video%.webm}.gif")" >> "$GITHUB_ENV"
@@ -169,7 +177,9 @@ jobs:
             const { data: comments } = await github.rest.issues.listComments({
               owner, repo, issue_number: Number(process.env.PR_NUMBER), per_page: 100,
             });
-            const existing = comments.find((c) => c.body.includes(marker));
+            const existing = comments.find(
+              (c) => c.user && c.user.login === 'github-actions[bot]' && c.body && c.body.includes(marker),
+            );
             if (existing) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
               core.info(`Updated comment ${existing.id} on PR #${process.env.PR_NUMBER}`);
