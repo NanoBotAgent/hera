@@ -80,7 +80,7 @@ jobs:
           video="$(ls /tmp/preview-media-artifact/videos/*.webm 2>/dev/null | head -1 || true)"
           if [ -n "$video" ]; then
             ffmpeg -hide_banner -loglevel error -t 30 -i "$video" \
-              -vf "fps=12,scale=1280:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=160[p];[s1][p]paletteuse=dither=bayer" \
+              -vf "fps=30,scale=1280:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=160[p];[s1][p]paletteuse=dither=bayer" \
               -loop 0 "${video%.webm}.gif"
           fi
           # Snapshot the screenshot filenames before they leave the working tree, so the
