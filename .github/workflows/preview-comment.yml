@@ -24,7 +24,7 @@ jobs:
     if: >-
       ${{ (github.event.workflow_run.event == 'pull_request' ||
            github.event.workflow_run.event == 'workflow_dispatch') &&
-          github.event.workflow_run.conclusion != 'cancelled' }}
+           github.event.workflow_run.conclusion != 'cancelled' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -100,6 +100,9 @@ jobs:
               -vf "fps=12,scale=1280:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=160[p];[s1][p]paletteuse=dither=bayer" \
               -loop 0 "${video%.webm}.gif"
           fi
+          # Snapshot the screenshot filenames before they leave the working tree, so the
+          # comment step (which runs after media/ is gone) can still list them.
+          find /tmp/preview-media-artifact/screenshots -maxdepth 1 -type f -name '*.png' -printf '%f\n' | sort > /tmp/preview-media-shot-list
           if git ls-remote --exit-code --heads origin previews-media >/dev/null 2>&1; then
             git fetch origin previews-media
             git checkout previews-media
@@ -113,8 +116,12 @@ jobs:
           rm -f /tmp/preview-media-artifact/pr-number
           cp -r /tmp/preview-media-artifact/. "$dest/"
           git add -A
-          git commit -m "Preview media for PR #${PR_NUMBER}"
-          git push origin previews-media
+          if git diff --cached --quiet; then
+            echo "Media unchanged for PR #${PR_NUMBER}; skipping the commit."
+          else
+            git commit -m "Preview media for PR #${PR_NUMBER}"
+            git push origin previews-media
+          fi
           if [ -n "$video" ]; then
             echo "PREVIEW_VIDEO=$(basename "$video")" >> "$GITHUB_ENV"
             echo "PREVIEW_GIF=$(basename "${video%.webm}.gif")" >> "$GITHUB_ENV"
@@ -126,7 +133,7 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number || steps.pr_marker.outputs.number }}
         run: |
           set -euo pipefail
-          base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/previews-media/pr-${PR_NUMBER}"
+          base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/previews-media/pr-${PR_NUMBER}/screenshots"
           {
             echo "<!-- preview-walkthrough -->"
             if [ "${{ env.CONCLUSION != 'success' }}" = "true" ]; then
@@ -138,28 +145,32 @@ jobs:
               echo
               echo "Latest capture: [run ${RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID})"
               echo
-              echo "| Start | Chat | Answered | Composer active |"
-              echo "| --- | --- | --- | --- |"
-              echo "| ![]($base/01-start.png) | ![]($base/02-chat-column.png) | ![]($base/04-answered.png) | ![]($base/05-composer-active.png) |"
+              echo "| Start | Waiting (feather) | Waiting (eye) |"
+              echo "| --- | --- | --- |"
+              echo "| ![]($base/01-start.png) | ![]($base/02-waiting-feather.png) | ![]($base/03-waiting-eye.png) |"
               echo
-              echo "| Waiting (feather) | Waiting (eye) | Phone | Phone answered |"
-              echo "| --- | --- | --- | --- |"
-              echo "| ![]($base/03a-waiting-feather.png) | ![]($base/03b-waiting-eye.png) | ![]($base/06-phone.png) | ![]($base/07-phone-answered.png) |"
+              echo "| First answer | Long trace (collapsed) | Long trace (open) |"
+              echo "| --- | --- | --- |"
+              echo "| ![]($base/04-first-answer.png) | ![]($base/05-long-trace-collapsed.png) | ![]($base/06-long-trace-open.png) |"
+              echo
+              echo "| Phone: start | Phone: answered |"
+              echo "| --- | --- |"
+              echo "| ![]($base/07-start-phone.png) | ![]($base/08-answer-phone.png) |"
               if [ -n "${PREVIEW_GIF:-}" ]; then
                 echo
                 echo "### Video"
                 echo
-                echo "![Turn walkthrough]($base/videos/${PREVIEW_GIF})"
+                echo "![Turn walkthrough](${base%/screenshots}/videos/${PREVIEW_GIF})"
                 echo
-                echo "[Full-quality webm]($base/videos/${PREVIEW_VIDEO})"
+                echo "[Full-quality webm](${base%/screenshots}/videos/${PREVIEW_VIDEO})"
               fi
               echo
               echo "<details><summary>Plain links</summary>"
               echo
-              for f in media/static/*.png; do
-                name="$(basename "$f")"
+              while IFS= read -r name; do
+                [ -z "$name" ] && continue
                 echo "- [$name]($base/$name)"
-              done
+              done < /tmp/preview-media-shot-list
               echo
               echo "</details>"
             fi
