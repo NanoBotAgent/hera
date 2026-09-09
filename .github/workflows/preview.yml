@@ -45,14 +45,16 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-python-workspace
+        with:
+          # A dispatch checkouts refs/pull/<n>/head, i.e. untrusted code; both cache triggers
+          # must be off so the default-branch cache cannot be poisoned (CodeQL cache-poisoning).
+          cache: ${{ !inputs.pr_number }}
 
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
           node-version: "24"
-          # Never cache on the dispatch path (CodeQL cache-poisoning): a dispatch checkouts
-          # refs/pull/<n>/head, i.e. untrusted code, and a write-capable npm cache could
-          # otherwise poison the default-branch cache scope.
+          # Same cache token: keep npm cold on the dispatch path.
           cache: ${{ !inputs.pr_number && 'npm' || '' }}
           cache-dependency-path: apps/core/web/package-lock.json
 
